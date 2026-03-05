@@ -1,211 +1,113 @@
-# POC Showcase Platform
+# POC Upload Platform
 
-A full-stack web application to manage and showcase company Proof of Concept (POC) projects.
+Full-stack Proof of Concept (POC) management app with role-based access, image uploads, and admin workflows.
 
-This repository contains:
-- `client/`: React + Vite frontend
-- `server/`: Node.js + Express + MongoDB backend
+## Stack
 
-## Features
+- Frontend: React 19, Vite 7, React Router, Zustand, Axios, Tailwind CSS
+- Backend: FastAPI, Motor (MongoDB), JWT auth, role-based authorization
 
-- User authentication with JWT access/refresh tokens
-- Role-based access control (`admin`, `developer`, `viewer`)
-- POC CRUD with search, tag filtering, status filtering, and pagination
-- Thumbnail image upload for POCs
-- Admin user management (create/update/delete users)
-- Responsive dashboard UI
-
-## Tech Stack
-
-### Frontend
-- React 19
-- Vite 7
-- React Router
-- Zustand
-- Axios
-- Tailwind CSS
-
-### Backend
-- Node.js + Express 5
-- MongoDB + Mongoose
-- Zod validation
-- Multer (file uploads)
-- JWT auth
-- Helmet, CORS, rate limiting, NoSQL sanitization
-
-## Project Structure
+## Repository Structure
 
 ```text
 POC-git/
-  client/
-    src/
-      components/
-      pages/
-      services/
-      store/
-  server/
-    config/
-    controllers/
-    middleware/
-    models/
-    routes/
-    services/
-    validators/
-    utils/
+  client/            # React frontend
+  backend-fastapi/   # FastAPI backend
 ```
+
+## Features
+
+- JWT auth: register, login, refresh, logout, current-user profile
+- Roles: `admin`, `developer`, `viewer`
+- POC workflows: create, edit, delete, list, detail, publish, upvote
+- User management for admins
+- Image upload support via `/uploads`
 
 ## Prerequisites
 
 - Node.js 18+
-- MongoDB (local or cloud)
-- npm
+- Python 3.10+
+- MongoDB (local or hosted)
 
-## Environment Variables
+## Local Development Setup
 
-Create `server/.env` with:
+### 1. Clone and move into the project
+
+```bash
+git clone https://github.com/Yash-Anchule/POC_upload.git
+cd POC_upload
+```
+
+### 2. Backend setup (FastAPI)
+
+```bash
+cd backend-fastapi
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+```
+
+Update `backend-fastapi/.env` as needed:
 
 ```env
-PORT=5000
+APP_NAME=POC FastAPI Backend
+APP_ENV=development
+PORT=8000
 MONGODB_URI=mongodb://127.0.0.1:27017/poc_showcase
+MONGODB_DB_NAME=poc_showcase
 CLIENT_URL=http://localhost:5173
-
-JWT_ACCESS_SECRET=your_access_secret
-JWT_REFRESH_SECRET=your_refresh_secret
-JWT_ACCESS_EXPIRY=15m
-JWT_REFRESH_EXPIRY=7d
+JWT_ACCESS_SECRET=replace_with_a_secure_access_secret
+JWT_REFRESH_SECRET=replace_with_a_secure_refresh_secret
+JWT_ACCESS_EXPIRY_MINUTES=15
+JWT_REFRESH_EXPIRY_DAYS=7
 ```
 
-## Local Setup
-
-### 1. Install dependencies
+Run backend:
 
 ```bash
-cd server
-npm install
-
-cd ../client
-npm install
+uvicorn app.main:app --reload --port 8000
 ```
 
-### 2. Run backend
+### 3. Frontend setup (React)
 
-```bash
-cd server
-npm run dev
-```
-
-Backend runs at `http://localhost:5000`.
-
-### 3. Run frontend
+In a new terminal:
 
 ```bash
 cd client
+npm install
 npm run dev
 ```
 
-Frontend runs at `http://localhost:5173`.
+Frontend runs at `http://localhost:5173` and proxies `/api` + `/uploads` to `http://localhost:8000`.
 
-Vite proxies `/api` and `/uploads` to backend port `5000`.
+## API Base
+
+- Base URL: `/api`
+- Health check: `GET /api/health`
 
 ## Default Admin Seed
 
-To create a default admin account:
-
 ```bash
-cd server
-node utils/seedAdmin.js
+cd backend-fastapi
+source .venv/bin/activate
+python -m scripts.seed_admin
 ```
 
 Default credentials:
+
 - Email: `admin@pocshowcase.com`
 - Password: `admin123`
 
-Change this immediately in real environments.
+## Production Notes
 
-## API Overview
-
-Base URL: `/api`
-
-### Auth
-- `POST /auth/register`
-- `POST /auth/login`
-- `POST /auth/refresh`
-- `POST /auth/logout` (auth required)
-- `GET /auth/me` (auth required)
-
-### Users (Admin only)
-- `GET /users`
-- `GET /users/:id`
-- `POST /users`
-- `PUT /users/:id`
-- `DELETE /users/:id`
-
-### POCs
-- `GET /pocs` (auth required)
-- `GET /pocs/:id` (auth required)
-- `POST /pocs` (admin/developer)
-- `PUT /pocs/:id` (admin/developer)
-- `DELETE /pocs/:id` (admin/developer)
-
-`GET /pocs` query params:
-- `page` (default `1`)
-- `limit` (default `10`)
-- `search` (title/description)
-- `tag` (comma-separated)
-- `status` (`draft|published`)
-- `author` (user id)
-
-## Roles and Permissions
-
-- `admin`: Full access to users and POCs.
-- `developer`: Create/update/delete own POCs.
-- `viewer`: View POCs only.
-
-## Security Notes
-
-- Access token sent via `Authorization: Bearer <token>`
-- Refresh token stored in frontend localStorage in current implementation
-- Auth endpoints protected by rate limiter
-- Helmet and request sanitization enabled
-
-## Build
-
-### Frontend
-
-```bash
-cd client
-npm run build
-npm run preview
-```
-
-### Backend (production)
-
-```bash
-cd server
-npm start
-```
-
-## Troubleshooting
-
-### Error: `Cannot set property query of #<IncomingMessage> which has only a getter`
-
-Cause: Express 5 incompatibility when middleware mutates `req.query` directly.
-
-Status in this repo: fixed by using Express-5-safe sanitization in `server/server.js`.
-
-### Error: `Cannot read properties of undefined (reading 'dryRun')`
-
-Cause: calling `mongoSanitize.sanitize()` without options.
-
-Status in this repo: fixed by passing options object (`{}`).
-
-## GitHub
-
-Repository: `https://github.com/NaveenReddy7013/POC-git.git`
+- Set strong JWT secrets
+- Restrict `CLIENT_URL` to your frontend domain
+- Configure persistent storage for `backend-fastapi/uploads`
+- Run FastAPI with a production ASGI setup (for example, `gunicorn` + `uvicorn` workers)
 
 ## License
 
 ISC
-
 
 

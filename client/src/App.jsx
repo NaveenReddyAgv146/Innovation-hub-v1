@@ -13,6 +13,7 @@ const PocList = lazy(() => import('./pages/PocList'));
 const PocDetail = lazy(() => import('./pages/PocDetail'));
 const PocForm = lazy(() => import('./pages/PocForm'));
 const UserManagement = lazy(() => import('./pages/UserManagement'));
+const IdeaReviews = lazy(() => import('./pages/IdeaReviews'));
 
 function PageLoader() {
   return <Spinner size="lg" className="mt-24" />;
@@ -58,7 +59,7 @@ export default function App() {
             path="/pocs/new"
             element={
               <AppLayout>
-                <RoleRoute roles={['admin', 'developer']}>
+                <RoleRoute roles={['admin', 'developer', 'viewer']}>
                   <PocForm />
                 </RoleRoute>
               </AppLayout>
@@ -91,6 +92,17 @@ export default function App() {
               <AppLayout>
                 <RoleRoute roles={['admin']}>
                   <UserManagement />
+                </RoleRoute>
+              </AppLayout>
+            }
+          />
+
+          <Route
+            path="/admin/idea-reviews"
+            element={
+              <AppLayout>
+                <RoleRoute roles={['admin']}>
+                  <IdeaReviews />
                 </RoleRoute>
               </AppLayout>
             }

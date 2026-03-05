@@ -1,6 +1,8 @@
 # Dependencies
 node_modules/
 **/node_modules/
+.venv/
+**/.venv/
 
 # Build outputs
 dist/
@@ -10,6 +12,8 @@ coverage/
 # Environment files
 .env
 .env.*
+!.env.example
+!**/.env.example
 server/.env
 client/.env
 
@@ -25,3 +29,9 @@ Thumbs.db
 
 # Runtime uploads (optional; remove if you need tracked sample files)
 server/uploads/
+backend-fastapi/uploads/
+
+# Python cache
+__pycache__/
+**/__pycache__/
+*.pyc

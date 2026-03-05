@@ -15,6 +15,10 @@ export default function PocDetail() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [deleting, setDeleting] = useState(false);
+    const [voting, setVoting] = useState(false);
+    const [voters, setVoters] = useState([]);
+    const [votersLoading, setVotersLoading] = useState(false);
+    const [votersError, setVotersError] = useState('');
 
     const fetchPoc = useCallback(async () => {
         setLoading(true);
@@ -33,9 +37,29 @@ export default function PocDetail() {
         fetchPoc();
     }, [fetchPoc]);
 
-    const canEdit =
-        user?.role === 'admin' ||
-        (user?.role === 'developer' && poc?.author?._id === user?._id);
+    const authorId = poc?.author?._id || poc?.author?.id || poc?.author;
+    const isOwner = authorId === user?._id || authorId === user?.id;
+    const canEdit = user?.role === 'admin' || (user?.role === 'developer' && isOwner);
+    const canViewVoters = user?.role === 'admin' || isOwner;
+    const canVote = poc?.status === 'published' && user?.role !== 'admin' && !isOwner;
+
+    const fetchVoters = useCallback(async () => {
+        if (!canViewVoters || !id) return;
+        setVotersLoading(true);
+        setVotersError('');
+        try {
+            const { data } = await pocService.getVoters(id);
+            setVoters(data.voters || []);
+        } catch {
+            setVotersError('Failed to load interested users');
+        } finally {
+            setVotersLoading(false);
+        }
+    }, [canViewVoters, id]);
+
+    useEffect(() => {
+        if (canViewVoters) fetchVoters();
+    }, [canViewVoters, fetchVoters]);
 
     const handleDelete = async () => {
         if (!window.confirm('Are you sure you want to delete this POC?')) return;
@@ -46,6 +70,22 @@ export default function PocDetail() {
         } catch {
             setError('Failed to delete POC');
             setDeleting(false);
+        }
+    };
+
+    const handleToggleInterest = async () => {
+        if (!canVote || !poc) return;
+        setVoting(true);
+        try {
+            const { data } = poc.hasVoted
+                ? await pocService.removeUpvote(poc._id)
+                : await pocService.upvote(poc._id);
+            setPoc((prev) => ({ ...prev, ...data.poc }));
+            if (canViewVoters) fetchVoters();
+        } catch {
+            setError('Failed to update interest');
+        } finally {
+            setVoting(false);
         }
     };
 
@@ -77,6 +117,9 @@ export default function PocDetail() {
                         <Badge color={poc.status === 'published' ? 'green' : 'amber'}>
                             {poc.status}
                         </Badge>
+                        <span className="text-sm text-charcoal-500">
+                            {(poc.votesCount || 0)} interested
+                        </span>
                     </div>
                     <h1 className="text-2xl sm:text-3xl font-bold text-charcoal-800">{poc.title}</h1>
                     <div className="flex items-center gap-2">
@@ -103,10 +146,64 @@ export default function PocDetail() {
                 )}
             </div>
 
+            {canVote && (
+                <div className="flex items-center gap-3">
+                    <Button
+                        type="button"
+                        variant={poc.hasVoted ? 'secondary' : 'primary'}
+                        size="sm"
+                        loading={voting}
+                        onClick={handleToggleInterest}
+                    >
+                        {poc.hasVoted ? 'Interested' : 'Mark Interested'}
+                    </Button>
+                    <span className="text-sm text-charcoal-500">
+                        {(poc.votesCount || 0)} users interested
+                    </span>
+                </div>
+            )}
+
             {/* Description */}
             <div className="bg-white rounded-2xl border border-sand-200 p-6">
                 <h2 className="text-lg font-semibold text-charcoal-800 mb-3">About</h2>
-                <p className="text-charcoal-600 whitespace-pre-line leading-relaxed">{poc.description}</p>
+                <p className="text-charcoal-600 whitespace-pre-line leading-relaxed">
+                    {poc.description || poc.challenges || 'No details provided'}
+                </p>
+            </div>
+
+            {/* Idea Details */}
+            <div className="bg-white rounded-2xl border border-sand-200 p-6 space-y-4">
+                <h2 className="text-lg font-semibold text-charcoal-800">Idea Submission Details</h2>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                        <p className="text-xs uppercase tracking-wide text-charcoal-400">Customer</p>
+                        <p className="text-sm text-charcoal-700">{poc.customer || '-'}</p>
+                    </div>
+                    <div className="space-y-1">
+                        <p className="text-xs uppercase tracking-wide text-charcoal-400">Customer Classification</p>
+                        <p className="text-sm text-charcoal-700">{poc.customerClassification || '-'}</p>
+                    </div>
+                    <div className="space-y-1">
+                        <p className="text-xs uppercase tracking-wide text-charcoal-400">Requestor Name</p>
+                        <p className="text-sm text-charcoal-700">
+                            {poc.requestorName || poc.author?.name || '-'}
+                        </p>
+                    </div>
+                    <div className="space-y-1">
+                        <p className="text-xs uppercase tracking-wide text-charcoal-400">Status</p>
+                        <p className="text-sm text-charcoal-700">{poc.status || '-'}</p>
+                    </div>
+                </div>
+
+                <div className="space-y-1">
+                    <p className="text-xs uppercase tracking-wide text-charcoal-400">
+                        Current Challenges / Requirements
+                    </p>
+                    <p className="text-sm text-charcoal-700 whitespace-pre-line">
+                        {poc.challenges || poc.description || '-'}
+                    </p>
+                </div>
             </div>
 
             {/* Tech Stack */}
@@ -122,7 +219,7 @@ export default function PocDetail() {
             )}
 
             {/* Links */}
-            {(poc.demoLink || poc.repoLink) && (
+            {(poc.demoLink || poc.repositoryLink || poc.repoLink) && (
                 <div className="bg-white rounded-2xl border border-sand-200 p-6">
                     <h2 className="text-lg font-semibold text-charcoal-800 mb-3">Links</h2>
                     <div className="flex flex-wrap gap-3">
@@ -139,9 +236,9 @@ export default function PocDetail() {
                                 Live Demo
                             </a>
                         )}
-                        {poc.repoLink && (
+                        {(poc.repositoryLink || poc.repoLink) && (
                             <a
-                                href={poc.repoLink}
+                                href={poc.repositoryLink || poc.repoLink}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-sand-100 text-charcoal-700 font-medium text-sm hover:bg-sand-200 transition-colors"
@@ -153,6 +250,36 @@ export default function PocDetail() {
                             </a>
                         )}
                     </div>
+                </div>
+            )}
+
+            {canViewVoters && (
+                <div className="bg-white rounded-2xl border border-sand-200 p-6">
+                    <div className="flex items-center justify-between mb-3">
+                        <h2 className="text-lg font-semibold text-charcoal-800">Interested Users</h2>
+                        <Button type="button" size="sm" variant="ghost" onClick={fetchVoters}>
+                            Refresh
+                        </Button>
+                    </div>
+                    {votersLoading ? (
+                        <Spinner size="sm" />
+                    ) : votersError ? (
+                        <p className="text-sm text-coral-500">{votersError}</p>
+                    ) : voters.length === 0 ? (
+                        <p className="text-sm text-charcoal-500">No users have marked interest yet.</p>
+                    ) : (
+                        <div className="space-y-2">
+                            {voters.map((voter) => (
+                                <div
+                                    key={voter._id || voter.id}
+                                    className="flex items-center justify-between rounded-xl border border-sand-200 px-3 py-2"
+                                >
+                                    <span className="text-sm text-charcoal-700">{voter.name}</span>
+                                    <span className="text-xs text-charcoal-500">{voter.email}</span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
             )}
         </div>

@@ -38,6 +38,10 @@ export const pocService = {
         });
     },
     delete: (id) => api.delete(`/pocs/${id}`),
+    publish: (id) => api.post(`/pocs/${id}/publish`),
+    upvote: (id) => api.post(`/pocs/${id}/upvote`),
+    removeUpvote: (id) => api.delete(`/pocs/${id}/upvote`),
+    getVoters: (id) => api.get(`/pocs/${id}/voters`),
 };
 
 export const userService = {

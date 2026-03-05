@@ -22,6 +22,7 @@ export default function PocList() {
     const [tagFilter, setTagFilter] = useState('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [votingId, setVotingId] = useState('');
 
     const fetchPocs = useCallback(async (page = 1) => {
         setLoading(true);
@@ -47,6 +48,29 @@ export default function PocList() {
         return () => clearTimeout(debounce);
     }, [fetchPocs]);
 
+    const canVoteOnPoc = (poc) => {
+        if (user?.role === 'admin') return false;
+        if (poc.status !== 'published') return false;
+        const authorId = poc.author?._id || poc.author?.id || poc.author;
+        return authorId !== user?._id && authorId !== user?.id;
+    };
+
+    const handleToggleInterest = async (e, poc) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setVotingId(poc._id);
+        try {
+            const { data } = poc.hasVoted
+                ? await pocService.removeUpvote(poc._id)
+                : await pocService.upvote(poc._id);
+            setPocs((prev) => prev.map((item) => (item._id === poc._id ? { ...item, ...data.poc } : item)));
+        } catch {
+            setError('Failed to update interest');
+        } finally {
+            setVotingId('');
+        }
+    };
+
     return (
         <div className="space-y-6">
             {/* Header */}
@@ -57,7 +81,7 @@ export default function PocList() {
                         {pagination.total} POC{pagination.total !== 1 ? 's' : ''} total
                     </p>
                 </div>
-                {(user?.role === 'admin' || user?.role === 'developer') && (
+                {(user?.role === 'admin' || user?.role === 'developer' || user?.role === 'viewer') && (
                     <Link to="/pocs/new">
                         <Button>+ Submit POC</Button>
                     </Link>
@@ -157,7 +181,26 @@ export default function PocList() {
                                             {poc.author?.name?.charAt(0)?.toUpperCase() || '?'}
                                         </div>
                                         <span className="text-xs text-charcoal-500">{poc.author?.name || 'Unknown'}</span>
+                                        {poc.status === 'published' && (
+                                            <>
+                                                <span className="text-charcoal-300">•</span>
+                                                <span className="text-xs text-charcoal-500">{poc.votesCount || 0} interested</span>
+                                            </>
+                                        )}
                                     </div>
+                                    {canVoteOnPoc(poc) && (
+                                        <div className="mt-3">
+                                            <Button
+                                                type="button"
+                                                size="sm"
+                                                variant={poc.hasVoted ? 'secondary' : 'outline'}
+                                                loading={votingId === poc._id}
+                                                onClick={(e) => handleToggleInterest(e, poc)}
+                                            >
+                                                {poc.hasVoted ? 'Interested' : 'Mark Interested'}
+                                            </Button>
+                                        </div>
+                                    )}
                                 </div>
                             </Card>
                         </Link>

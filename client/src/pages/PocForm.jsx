@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { pocService } from '../services/endpoints';
+import useAuthStore from '../store/authStore';
 import Input from '../components/ui/Input';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
@@ -10,13 +11,19 @@ export default function PocForm() {
     const { id } = useParams();
     const isEdit = Boolean(id);
     const navigate = useNavigate();
+    const user = useAuthStore((s) => s.user);
+    const isAdmin = user?.role === 'admin';
+    const isViewer = user?.role === 'viewer';
 
     const [form, setForm] = useState({
         title: '',
-        description: '',
+        customer: '',
+        customerClassification: 'Existing',
+        challenges: '',
+        requestorName: '',
         techStack: [],
         demoLink: '',
-        repoLink: '',
+        repositoryLink: '',
         status: 'draft',
     });
     const [tagInput, setTagInput] = useState('');
@@ -32,12 +39,15 @@ export default function PocForm() {
             const { data } = await pocService.getById(id);
             const poc = data.poc;
             setForm({
-                title: poc.title,
-                description: poc.description,
+                title: poc.title || '',
+                customer: poc.customer || '',
+                customerClassification: poc.customerClassification || 'Existing',
+                challenges: poc.challenges || '',
+                requestorName: poc.requestorName || '',
                 techStack: poc.techStack || [],
                 demoLink: poc.demoLink || '',
-                repoLink: poc.repoLink || '',
-                status: poc.status,
+                repositoryLink: poc.repositoryLink || poc.repoLink || '',
+                status: poc.status || 'draft',
             });
             if (poc.thumbnail) setPreview(poc.thumbnail);
         } catch {
@@ -51,10 +61,17 @@ export default function PocForm() {
         if (isEdit) fetchPoc();
     }, [isEdit, fetchPoc]);
 
+    useEffect(() => {
+        if (!isAdmin && user?.name && !form.requestorName) {
+            setForm((prev) => ({ ...prev, requestorName: user.name }));
+        }
+    }, [isAdmin, user?.name, form.requestorName]);
+
     const validate = () => {
         const errs = {};
         if (!form.title.trim()) errs.title = 'Title is required';
-        if (!form.description.trim()) errs.description = 'Description is required';
+        if (!form.customer.trim()) errs.customer = 'Customer is required';
+        /* if (!form.description.trim()) errs.description = 'Description is required'; */
         setErrors(errs);
         return Object.keys(errs).length === 0;
     };
@@ -89,9 +106,19 @@ export default function PocForm() {
         setLoading(true);
 
         try {
-            const payload = { ...form };
-            /* Convert techStack array to JSON string for FormData */
-            payload.techStack = form.techStack;
+            const payload = {
+                title: form.title,
+                customer: form.customer,
+                customerClassification: form.customerClassification,
+                challenges: form.challenges,
+                description: form.challenges,
+                requestorName: isAdmin ? undefined : (form.requestorName || user?.name || ''),
+                techStack: form.techStack,
+                demoLink: form.demoLink,
+                repositoryLink: form.repositoryLink,
+                repoLink: form.repositoryLink,
+                status: isViewer ? 'draft' : form.status,
+            };
             if (thumbnail) payload.thumbnail = thumbnail;
 
             if (isEdit) {
@@ -112,7 +139,7 @@ export default function PocForm() {
     return (
         <div className="max-w-2xl mx-auto">
             <h1 className="text-2xl font-bold text-charcoal-800 mb-6">
-                {isEdit ? 'Edit POC' : 'Submit New POC'}
+                {isEdit ? 'Edit POC' : 'Submit New Idea'}
             </h1>
 
             <Card hover={false} className="p-6 sm:p-8">
@@ -125,13 +152,60 @@ export default function PocForm() {
                 <form onSubmit={handleSubmit} className="space-y-5">
                     <Input
                         label="Title"
-                        placeholder="My Awesome POC"
+                        placeholder="My Awesome Feature Idea"
                         value={form.title}
                         onChange={(e) => setForm({ ...form, title: e.target.value })}
                         error={errors.title}
                         required
                     />
 
+                    <Input
+                        label="Who is it for? Which Customer(s) is this feature for?"
+                        placeholder="Customer name(s)"
+                        value={form.customer}
+                        onChange={(e) => setForm({ ...form, customer: e.target.value })}
+                        error={errors.customer}
+                        required
+                    />
+
+                    <div className="space-y-1.5">
+                        <label className="block text-sm font-medium text-charcoal-700">
+                            Customer Classification
+                        </label>
+                        <select
+                            value={form.customerClassification}
+                            onChange={(e) => setForm({ ...form, customerClassification: e.target.value })}
+                            className="w-full rounded-xl border border-sand-300 hover:border-sand-400 bg-white px-4 py-2.5 text-sm text-charcoal-800 focus:border-terracotta-400 focus:ring-2 focus:ring-terracotta-100 focus:outline-none transition-all duration-200"
+                        >
+                            <option value="Existing">Existing</option>
+                            <option value="New">New</option>
+                        </select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                        <label className="block text-sm font-medium text-charcoal-700">
+                            Current Challenges / Requirements
+                        </label>
+                        <textarea
+                            className="w-full rounded-xl border border-sand-300 hover:border-sand-400 bg-white px-4 py-2.5 text-sm text-charcoal-800 placeholder:text-charcoal-400 focus:border-terracotta-400 focus:ring-2 focus:ring-terracotta-100 focus:outline-none transition-all duration-200 resize-none"
+                            rows={5}
+                            placeholder="Describe the current challenges or requirements..."
+                            value={form.challenges}
+                            onChange={(e) => setForm({ ...form, challenges: e.target.value })}
+                        />
+                    </div>
+
+                    {!isAdmin && (
+                        <Input
+                            label="Requestor Name"
+                            placeholder="Requestor name"
+                            value={form.requestorName}
+                            onChange={(e) => setForm({ ...form, requestorName: e.target.value })}
+                            readOnly={isViewer}
+                        />
+                    )}
+
+                    {/*
                     <div className="space-y-1.5">
                         <label className="block text-sm font-medium text-charcoal-700">Description</label>
                         <textarea
@@ -144,6 +218,7 @@ export default function PocForm() {
                         />
                         {errors.description && <p className="text-xs text-coral-500">{errors.description}</p>}
                     </div>
+                    */}
 
                     {/* Tech Stack tags */}
                     <div className="space-y-1.5">
@@ -175,6 +250,7 @@ export default function PocForm() {
 
                     <Input
                         label="Demo Link"
+                        type="url"
                         placeholder="https://demo.example.com"
                         value={form.demoLink}
                         onChange={(e) => setForm({ ...form, demoLink: e.target.value })}
@@ -182,31 +258,26 @@ export default function PocForm() {
 
                     <Input
                         label="Repository Link"
+                        type="url"
                         placeholder="https://github.com/org/repo"
-                        value={form.repoLink}
-                        onChange={(e) => setForm({ ...form, repoLink: e.target.value })}
+                        value={form.repositoryLink}
+                        onChange={(e) => setForm({ ...form, repositoryLink: e.target.value })}
                     />
 
                     {/* Status */}
-                    <div className="space-y-1.5">
-                        <label className="block text-sm font-medium text-charcoal-700">Status</label>
-                        <div className="flex gap-3">
-                            {['draft', 'published'].map((s) => (
-                                <button
-                                    key={s}
-                                    type="button"
-                                    onClick={() => setForm({ ...form, status: s })}
-                                    className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200
-                    ${form.status === s
-                                            ? 'bg-terracotta-500 text-white shadow-sm'
-                                            : 'bg-sand-100 text-charcoal-600 hover:bg-sand-200'
-                                        }`}
-                                >
-                                    {s.charAt(0).toUpperCase() + s.slice(1)}
-                                </button>
-                            ))}
+                    {!isViewer && (
+                        <div className="space-y-1.5">
+                            <label className="block text-sm font-medium text-charcoal-700">Status</label>
+                            <select
+                                value={form.status}
+                                onChange={(e) => setForm({ ...form, status: e.target.value })}
+                                className="w-full rounded-xl border border-sand-300 hover:border-sand-400 bg-white px-4 py-2.5 text-sm text-charcoal-800 focus:border-terracotta-400 focus:ring-2 focus:ring-terracotta-100 focus:outline-none transition-all duration-200"
+                            >
+                                <option value="draft">Draft</option>
+                                <option value="published">Published</option>
+                            </select>
                         </div>
-                    </div>
+                    )}
 
                     {/* Thumbnail */}
                     <div className="space-y-1.5">
