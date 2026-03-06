@@ -3,9 +3,22 @@ import { Link, useNavigate } from 'react-router-dom';
 import { authService } from '../services/endpoints';
 import Input from '../components/ui/Input';
 import Button from '../components/ui/Button';
+import { COMPANY_LOGO_URL, COMPANY_NAME } from '../config/branding';
+
+const getApiErrorMessage = (err, fallback) => {
+    const data = err?.response?.data;
+    if (!data) return fallback;
+    if (typeof data.message === 'string' && data.message.trim()) return data.message;
+    if (typeof data.detail === 'string' && data.detail.trim()) return data.detail;
+    if (Array.isArray(data.detail) && data.detail.length > 0) {
+        const first = data.detail[0];
+        if (typeof first?.msg === 'string' && first.msg.trim()) return first.msg;
+    }
+    return fallback;
+};
 
 export default function Register() {
-    const [form, setForm] = useState({ name: '', email: '', password: '' });
+    const [form, setForm] = useState({ firstName: '', lastName: '', email: '', password: '' });
     const [errors, setErrors] = useState({});
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
@@ -13,7 +26,8 @@ export default function Register() {
 
     const validate = () => {
         const errs = {};
-        if (!form.name.trim()) errs.name = 'Name is required';
+        if (!form.firstName.trim()) errs.firstName = 'First name is required';
+        if (!form.lastName.trim()) errs.lastName = 'Last name is required';
         if (!form.email.trim()) errs.email = 'Email is required';
         if (form.password.length < 6) errs.password = 'At least 6 characters';
         setErrors(errs);
@@ -29,7 +43,7 @@ export default function Register() {
             await authService.register(form);
             navigate('/login', { state: { registered: true } });
         } catch (err) {
-            setError(err.response?.data?.message || 'Registration failed');
+            setError(getApiErrorMessage(err, 'Registration failed'));
         } finally {
             setLoading(false);
         }
@@ -39,13 +53,9 @@ export default function Register() {
         <div className="min-h-screen bg-warm-white flex items-center justify-center px-4">
             <div className="w-full max-w-md">
                 <div className="text-center mb-8">
-                    <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-terracotta-400 to-coral-400 shadow-lg mb-4">
-                        <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                        </svg>
-                    </div>
+                    <img src={COMPANY_LOGO_URL} alt={`${COMPANY_NAME} logo`} className="mx-auto w-14 h-14 rounded-2xl object-cover shadow-lg mb-4 bg-white" />
                     <h1 className="text-2xl font-bold text-charcoal-800">Create Account</h1>
-                    <p className="text-charcoal-500 mt-1">Join the POC Showcase platform</p>
+                    <p className="text-charcoal-500 mt-1">Join the {COMPANY_NAME} platform</p>
                 </div>
 
                 <div className="bg-white rounded-2xl border border-sand-200 shadow-sm p-6 sm:p-8">
@@ -57,11 +67,19 @@ export default function Register() {
 
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <Input
-                            label="Full Name"
-                            placeholder="Jane Doe"
-                            value={form.name}
-                            onChange={(e) => setForm({ ...form, name: e.target.value })}
-                            error={errors.name}
+                            label="First Name"
+                            placeholder="Jane"
+                            value={form.firstName}
+                            onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+                            error={errors.firstName}
+                            required
+                        />
+                        <Input
+                            label="Last Name"
+                            placeholder="Doe"
+                            value={form.lastName}
+                            onChange={(e) => setForm({ ...form, lastName: e.target.value })}
+                            error={errors.lastName}
                             required
                         />
                         <Input

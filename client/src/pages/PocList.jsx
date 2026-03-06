@@ -12,6 +12,8 @@ import ErrorState from '../components/ui/ErrorState';
 import Pagination from '../components/ui/Pagination';
 
 const STATUS_OPTIONS = ['all', 'published', 'draft'];
+const getAuthorName = (author = {}) =>
+    [author.firstName, author.lastName].filter(Boolean).join(' ').trim() || author.name || 'Unknown';
 
 export default function PocList() {
     const user = useAuthStore((s) => s.user);
@@ -63,7 +65,17 @@ export default function PocList() {
             const { data } = poc.hasVoted
                 ? await pocService.removeUpvote(poc._id)
                 : await pocService.upvote(poc._id);
-            setPocs((prev) => prev.map((item) => (item._id === poc._id ? { ...item, ...data.poc } : item)));
+            setPocs((prev) =>
+                prev.map((item) => {
+                    if (item._id !== poc._id) return item;
+                    const nextPoc = data.poc || {};
+                    const author =
+                        nextPoc.author && typeof nextPoc.author === 'object'
+                            ? nextPoc.author
+                            : item.author;
+                    return { ...item, ...nextPoc, author };
+                })
+            );
         } catch {
             setError('Failed to update interest');
         } finally {
@@ -144,7 +156,9 @@ export default function PocList() {
                 />
             ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                    {pocs.map((poc) => (
+                    {pocs.map((poc) => {
+                        const authorName = getAuthorName(poc.author);
+                        return (
                         <Link key={poc._id} to={`/pocs/${poc._id}`}>
                             <Card className="overflow-hidden h-full flex flex-col">
                                 {/* Thumbnail */}
@@ -178,9 +192,9 @@ export default function PocList() {
                                     </div>
                                     <div className="flex items-center gap-2 mt-3 pt-3 border-t border-sand-100">
                                         <div className="w-6 h-6 rounded-full bg-gradient-to-br from-amber-300 to-terracotta-400 flex items-center justify-center text-white text-xs font-semibold">
-                                            {poc.author?.name?.charAt(0)?.toUpperCase() || '?'}
+                                            {authorName.charAt(0)?.toUpperCase() || '?'}
                                         </div>
-                                        <span className="text-xs text-charcoal-500">{poc.author?.name || 'Unknown'}</span>
+                                        <span className="text-xs text-charcoal-500">{authorName}</span>
                                         {poc.status === 'published' && (
                                             <>
                                                 <span className="text-charcoal-300">•</span>
@@ -204,7 +218,8 @@ export default function PocList() {
                                 </div>
                             </Card>
                         </Link>
-                    ))}
+                        );
+                    })}
                 </div>
             )}
 

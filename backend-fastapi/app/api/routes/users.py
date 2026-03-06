@@ -7,6 +7,7 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.api.deps import require_roles
 from app.core.database import get_db
 from app.core.security import hash_password
+from app.schemas.auth import compose_full_name
 from app.schemas.user import CreateUserRequest, UpdateUserRequest
 from app.utils.serialization import serialize_doc
 
@@ -73,8 +74,12 @@ async def create_user(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
 
     now = datetime.now(timezone.utc)
+    first_name = payload.firstName.strip()
+    last_name = payload.lastName.strip()
     doc = {
-        "name": payload.name.strip(),
+        "firstName": first_name,
+        "lastName": last_name,
+        "name": compose_full_name(first_name, last_name),
         "email": payload.email.lower(),
         "password": hash_password(payload.password),
         "role": payload.role,
@@ -103,11 +108,27 @@ async def update_user(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     updates = payload.model_dump(exclude_none=True)
+    if "firstName" in updates:
+        updates["firstName"] = updates["firstName"].strip()
+    if "lastName" in updates:
+        updates["lastName"] = updates["lastName"].strip()
     if "email" in updates:
         updates["email"] = updates["email"].lower()
         email_owner = await db.users.find_one({"email": updates["email"]})
         if email_owner and str(email_owner["_id"]) != user_id:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already in use")
+
+    if "firstName" in updates or "lastName" in updates:
+        first_name = updates.get("firstName", existing_user.get("firstName") or "")
+        last_name = updates.get("lastName", existing_user.get("lastName") or "")
+        if not first_name and existing_user.get("name"):
+            parts = existing_user["name"].strip().split(" ", 1)
+            first_name = parts[0]
+            if not last_name and len(parts) > 1:
+                last_name = parts[1]
+        updates["firstName"] = first_name
+        updates["lastName"] = last_name
+        updates["name"] = compose_full_name(first_name, last_name)
 
     if "password" in updates:
         updates["password"] = hash_password(updates["password"])

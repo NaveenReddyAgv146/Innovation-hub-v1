@@ -7,6 +7,18 @@ import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import Spinner from '../components/ui/Spinner';
 
+const getApiErrorMessage = (err, fallback) => {
+    const data = err?.response?.data;
+    if (!data) return fallback;
+    if (typeof data.message === 'string' && data.message.trim()) return data.message;
+    if (typeof data.detail === 'string' && data.detail.trim()) return data.detail;
+    if (Array.isArray(data.detail) && data.detail.length > 0) {
+        const first = data.detail[0];
+        if (typeof first?.msg === 'string' && first.msg.trim()) return first.msg;
+    }
+    return fallback;
+};
+
 export default function PocForm() {
     const { id } = useParams();
     const isEdit = Boolean(id);
@@ -128,7 +140,7 @@ export default function PocForm() {
             }
             navigate('/pocs');
         } catch (err) {
-            setError(err.response?.data?.message || `Failed to ${isEdit ? 'update' : 'create'} POC`);
+            setError(getApiErrorMessage(err, `Failed to ${isEdit ? 'update' : 'create'} POC`));
         } finally {
             setLoading(false);
         }

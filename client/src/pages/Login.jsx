@@ -4,6 +4,7 @@ import useAuthStore from '../store/authStore';
 import { authService } from '../services/endpoints';
 import Input from '../components/ui/Input';
 import Button from '../components/ui/Button';
+import { COMPANY_LOGO_URL, COMPANY_NAME } from '../config/branding';
 
 export default function Login() {
     const [form, setForm] = useState({ email: '', password: '' });
@@ -35,13 +36,9 @@ export default function Login() {
             <div className="w-full max-w-md">
                 {/* Brand */}
                 <div className="text-center mb-8">
-                    <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-terracotta-400 to-coral-400 shadow-lg mb-4">
-                        <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                        </svg>
-                    </div>
+                    <img src={COMPANY_LOGO_URL} alt={`${COMPANY_NAME} logo`} className="mx-auto w-14 h-14 rounded-2xl object-cover shadow-lg mb-4 bg-white" />
                     <h1 className="text-2xl font-bold text-charcoal-800">Welcome back</h1>
-                    <p className="text-charcoal-500 mt-1">Sign in to POC Showcase</p>
+                    <p className="text-charcoal-500 mt-1">Sign in to {COMPANY_NAME}</p>
                 </div>
 
                 {/* Card */}

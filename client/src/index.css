@@ -1,53 +1,53 @@
-@import "tailwindcss";
+﻿@import "tailwindcss";
 
 /* ============================================
-   POC Showcase — Warm Palette Design Tokens  
+   Agivant - Navy and Red Design Tokens
    ============================================ */
 
 @theme {
-  --color-terracotta-50: #fdf5f2;
-  --color-terracotta-100: #fbe8e1;
-  --color-terracotta-200: #f5cfc1;
-  --color-terracotta-300: #edb09a;
-  --color-terracotta-400: #e08c6d;
-  --color-terracotta-500: #c2694f;
-  --color-terracotta-600: #a85540;
-  --color-terracotta-700: #8c4435;
-  --color-terracotta-800: #743a2f;
-  --color-terracotta-900: #60332b;
+  --color-terracotta-50: #eef4ff;
+  --color-terracotta-100: #dde8ff;
+  --color-terracotta-200: #bfd3ff;
+  --color-terracotta-300: #95b3ff;
+  --color-terracotta-400: #648cff;
+  --color-terracotta-500: #1d4ed8;
+  --color-terracotta-600: #1e40af;
+  --color-terracotta-700: #1e3a8a;
+  --color-terracotta-800: #172554;
+  --color-terracotta-900: #0f172a;
 
-  --color-amber-50: #fffbeb;
-  --color-amber-100: #fef3c7;
-  --color-amber-200: #fde68a;
-  --color-amber-300: #fcd34d;
-  --color-amber-400: #e8a840;
-  --color-amber-500: #d97706;
-  --color-amber-600: #b45309;
-  --color-amber-700: #92400e;
+  --color-amber-50: #fef2f2;
+  --color-amber-100: #fee2e2;
+  --color-amber-200: #fecaca;
+  --color-amber-300: #fca5a5;
+  --color-amber-400: #f87171;
+  --color-amber-500: #ef4444;
+  --color-amber-600: #dc2626;
+  --color-amber-700: #b91c1c;
 
-  --color-coral-50: #fef2f0;
-  --color-coral-100: #fde1dd;
-  --color-coral-200: #fcc8c0;
-  --color-coral-300: #f5a498;
-  --color-coral-400: #e07b6c;
-  --color-coral-500: #d0564a;
-  --color-coral-600: #b83f35;
+  --color-coral-50: #fef2f2;
+  --color-coral-100: #fee2e2;
+  --color-coral-200: #fecaca;
+  --color-coral-300: #fca5a5;
+  --color-coral-400: #ef4444;
+  --color-coral-500: #dc2626;
+  --color-coral-600: #b91c1c;
 
-  --color-sand-50: #faf5f0;
-  --color-sand-100: #f3ebe0;
-  --color-sand-200: #e8ddd3;
-  --color-sand-300: #d6c8b8;
-  --color-sand-400: #c0ab96;
+  --color-sand-50: #f8fafc;
+  --color-sand-100: #f1f5f9;
+  --color-sand-200: #e2e8f0;
+  --color-sand-300: #cbd5e1;
+  --color-sand-400: #94a3b8;
 
-  --color-warm-white: #faf5f0;
-  --color-warm-50: #fefcf9;
-  --color-warm-100: #fdf8f3;
+  --color-warm-white: #f8fafc;
+  --color-warm-50: #f8fafc;
+  --color-warm-100: #f1f5f9;
 
-  --color-charcoal-800: #3d3631;
-  --color-charcoal-700: #504841;
-  --color-charcoal-600: #655b53;
-  --color-charcoal-500: #7a6f66;
-  --color-charcoal-400: #958a80;
+  --color-charcoal-800: #0f172a;
+  --color-charcoal-700: #1e293b;
+  --color-charcoal-600: #334155;
+  --color-charcoal-500: #475569;
+  --color-charcoal-400: #64748b;
 }
 
 /* ============================================

@@ -101,6 +101,15 @@ def enrich_vote_info(poc: dict[str, Any], current_user_id: str) -> dict[str, Any
     return poc
 
 
+async def enrich_author_info(db: AsyncIOMotorDatabase, poc: dict[str, Any]) -> dict[str, Any]:
+    author_id = poc.get("author")
+    if author_id and ObjectId.is_valid(author_id):
+        user = await db.users.find_one({"_id": ObjectId(author_id)}, {"name": 1, "email": 1})
+        if user:
+            poc["author"] = serialize_doc(user)
+    return poc
+
+
 @router.get("")
 async def get_pocs(
     page: int = Query(default=1, ge=1),
@@ -112,24 +121,38 @@ async def get_pocs(
     current_user=Depends(get_current_user),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
-    query: dict[str, Any] = {}
+    query_parts: list[dict[str, Any]] = []
 
     if search:
         regex = {"$regex": search, "$options": "i"}
-        query["$or"] = [{"title": regex}, {"description": regex}]
+        query_parts.append({"$or": [{"title": regex}, {"description": regex}]})
 
     if tag:
         tags = [item.strip() for item in tag.split(",") if item.strip()]
         if tags:
-            query["techStack"] = {"$in": tags}
+            query_parts.append({"techStack": {"$in": tags}})
 
     if current_user.get("role") == "viewer":
-        query["status"] = "published"
+        viewer_id = ObjectId(current_user["id"])
+        if status_filter == "draft":
+            query_parts.append({"status": "draft"})
+            query_parts.append({"author": viewer_id})
+        elif status_filter == "published":
+            query_parts.append({"status": "published"})
+        else:
+            query_parts.append({"$or": [{"status": "published"}, {"author": viewer_id}]})
     elif status_filter:
-        query["status"] = status_filter
+        query_parts.append({"status": status_filter})
 
     if author and ObjectId.is_valid(author):
-        query["author"] = ObjectId(author)
+        query_parts.append({"author": ObjectId(author)})
+
+    if not query_parts:
+        query: dict[str, Any] = {}
+    elif len(query_parts) == 1:
+        query = query_parts[0]
+    else:
+        query = {"$and": query_parts}
 
     total = await db.pocs.count_documents(query)
     cursor = db.pocs.find(query).sort("createdAt", -1).skip((page - 1) * limit).limit(limit)
@@ -169,7 +192,11 @@ async def get_poc_by_id(
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     poc = await fetch_poc_or_404(db, poc_id)
-    if current_user.get("role") == "viewer" and poc.get("status") != "published":
+    if (
+        current_user.get("role") == "viewer"
+        and poc.get("status") != "published"
+        and str(poc.get("author")) != current_user["id"]
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have permission to view this idea yet",
@@ -408,6 +435,7 @@ async def upvote_poc(
     )
     updated = await db.pocs.find_one({"_id": ObjectId(poc_id)})
     serialized = serialize_doc(updated)
+    await enrich_author_info(db, serialized)
     enrich_vote_info(serialized, current_user["id"])
     return {"message": "Interest added", "poc": serialized}
 
@@ -439,6 +467,7 @@ async def remove_upvote_poc(
     )
     updated = await db.pocs.find_one({"_id": ObjectId(poc_id)})
     serialized = serialize_doc(updated)
+    await enrich_author_info(db, serialized)
     enrich_vote_info(serialized, current_user["id"])
     return {"message": "Interest removed", "poc": serialized}
 

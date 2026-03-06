@@ -7,6 +7,9 @@ import Button from '../components/ui/Button';
 import Spinner from '../components/ui/Spinner';
 import ErrorState from '../components/ui/ErrorState';
 
+const getAuthorName = (author = {}) =>
+    [author.firstName, author.lastName].filter(Boolean).join(' ').trim() || author.name || 'Unknown';
+
 export default function PocDetail() {
     const { id } = useParams();
     const user = useAuthStore((s) => s.user);
@@ -42,6 +45,7 @@ export default function PocDetail() {
     const canEdit = user?.role === 'admin' || (user?.role === 'developer' && isOwner);
     const canViewVoters = user?.role === 'admin' || isOwner;
     const canVote = poc?.status === 'published' && user?.role !== 'admin' && !isOwner;
+    const authorName = getAuthorName(poc?.author);
 
     const fetchVoters = useCallback(async () => {
         if (!canViewVoters || !id) return;
@@ -80,7 +84,14 @@ export default function PocDetail() {
             const { data } = poc.hasVoted
                 ? await pocService.removeUpvote(poc._id)
                 : await pocService.upvote(poc._id);
-            setPoc((prev) => ({ ...prev, ...data.poc }));
+            setPoc((prev) => {
+                const nextPoc = data.poc || {};
+                const author =
+                    nextPoc.author && typeof nextPoc.author === 'object'
+                        ? nextPoc.author
+                        : prev?.author;
+                return { ...prev, ...nextPoc, author };
+            });
             if (canViewVoters) fetchVoters();
         } catch {
             setError('Failed to update interest');
@@ -124,9 +135,9 @@ export default function PocDetail() {
                     <h1 className="text-2xl sm:text-3xl font-bold text-charcoal-800">{poc.title}</h1>
                     <div className="flex items-center gap-2">
                         <div className="w-7 h-7 rounded-full bg-gradient-to-br from-amber-300 to-terracotta-400 flex items-center justify-center text-white text-xs font-semibold">
-                            {poc.author?.name?.charAt(0)?.toUpperCase() || '?'}
+                            {authorName.charAt(0)?.toUpperCase() || '?'}
                         </div>
-                        <span className="text-sm text-charcoal-600">{poc.author?.name}</span>
+                        <span className="text-sm text-charcoal-600">{authorName}</span>
                         <span className="text-charcoal-400">·</span>
                         <span className="text-sm text-charcoal-400">
                             {new Date(poc.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
@@ -187,7 +198,7 @@ export default function PocDetail() {
                     <div className="space-y-1">
                         <p className="text-xs uppercase tracking-wide text-charcoal-400">Requestor Name</p>
                         <p className="text-sm text-charcoal-700">
-                            {poc.requestorName || poc.author?.name || '-'}
+                            {poc.requestorName || authorName || '-'}
                         </p>
                     </div>
                     <div className="space-y-1">

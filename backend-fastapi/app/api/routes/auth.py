@@ -15,6 +15,7 @@ from app.core.security import (
     verify_password,
 )
 from app.schemas.auth import LoginRequest, RefreshRequest, RegisterRequest
+from app.schemas.auth import compose_full_name
 from app.utils.serialization import serialize_doc
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -27,8 +28,12 @@ async def register(payload: RegisterRequest, db: AsyncIOMotorDatabase = Depends(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
 
     now = datetime.now(timezone.utc)
+    first_name = payload.firstName.strip()
+    last_name = payload.lastName.strip()
     doc = {
-        "name": payload.name.strip(),
+        "firstName": first_name,
+        "lastName": last_name,
+        "name": compose_full_name(first_name, last_name),
         "email": payload.email.lower(),
         "password": hash_password(payload.password),
         "role": "viewer",

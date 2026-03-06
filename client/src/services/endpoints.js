@@ -20,9 +20,7 @@ export const pocService = {
                 formData.append(key, value);
             }
         });
-        return api.post('/pocs', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-        });
+        return api.post('/pocs', formData);
     },
     update: (id, data) => {
         const formData = new FormData();
@@ -33,9 +31,7 @@ export const pocService = {
                 formData.append(key, value);
             }
         });
-        return api.put(`/pocs/${id}`, formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-        });
+        return api.put(`/pocs/${id}`, formData);
     },
     delete: (id) => api.delete(`/pocs/${id}`),
     publish: (id) => api.post(`/pocs/${id}/publish`),

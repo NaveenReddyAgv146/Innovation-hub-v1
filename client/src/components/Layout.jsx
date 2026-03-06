@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import useAuthStore from '../store/authStore';
 import { authService } from '../services/endpoints';
+import { COMPANY_LOGO_URL, COMPANY_NAME } from '../config/branding';
 
 export default function Layout({ children }) {
     const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -49,7 +50,7 @@ export default function Layout({ children }) {
                             <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
                         </svg>
                     </button>
-                    <span className="font-bold text-terracotta-600 text-lg">POC Showcase</span>
+                    <span className="font-bold text-terracotta-600 text-lg">{COMPANY_NAME}</span>
                     <div className="w-9" />
                 </div>
             </header>
@@ -71,12 +72,8 @@ export default function Layout({ children }) {
                 {/* Brand */}
                 <div className="px-6 py-5 border-b border-sand-100">
                     <Link to="/dashboard" className="flex items-center gap-2.5" onClick={() => setSidebarOpen(false)}>
-                        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-terracotta-400 to-coral-400 flex items-center justify-center shadow-sm">
-                            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                            </svg>
-                        </div>
-                        <span className="font-bold text-charcoal-800 text-lg">POC Showcase</span>
+                        <img src={COMPANY_LOGO_URL} alt={`${COMPANY_NAME} logo`} className="w-9 h-9 rounded-xl object-cover shadow-sm bg-white" />
+                        <span className="font-bold text-charcoal-800 text-lg">{COMPANY_NAME}</span>
                     </Link>
                 </div>
 

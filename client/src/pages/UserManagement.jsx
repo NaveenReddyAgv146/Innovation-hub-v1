@@ -11,6 +11,19 @@ import EmptyState from '../components/ui/EmptyState';
 import Pagination from '../components/ui/Pagination';
 
 const ROLE_COLORS = { admin: 'coral', developer: 'terracotta', viewer: 'sand' };
+const getFullName = (user = {}) =>
+    [user.firstName, user.lastName].filter(Boolean).join(' ').trim() || user.name || 'Unknown';
+const getApiErrorMessage = (err, fallback) => {
+    const data = err?.response?.data;
+    if (!data) return fallback;
+    if (typeof data.message === 'string' && data.message.trim()) return data.message;
+    if (typeof data.detail === 'string' && data.detail.trim()) return data.detail;
+    if (Array.isArray(data.detail) && data.detail.length > 0) {
+        const first = data.detail[0];
+        if (typeof first?.msg === 'string' && first.msg.trim()) return first.msg;
+    }
+    return fallback;
+};
 
 export default function UserManagement() {
     const [users, setUsers] = useState([]);
@@ -20,7 +33,7 @@ export default function UserManagement() {
     const [error, setError] = useState('');
     const [modalOpen, setModalOpen] = useState(false);
     const [editUser, setEditUser] = useState(null);
-    const [formData, setFormData] = useState({ name: '', email: '', password: '', role: 'viewer' });
+    const [formData, setFormData] = useState({ firstName: '', lastName: '', email: '', password: '', role: 'viewer' });
     const [formError, setFormError] = useState('');
     const [saving, setSaving] = useState(false);
 
@@ -47,14 +60,22 @@ export default function UserManagement() {
 
     const openCreateModal = () => {
         setEditUser(null);
-        setFormData({ name: '', email: '', password: '', role: 'viewer' });
+        setFormData({ firstName: '', lastName: '', email: '', password: '', role: 'viewer' });
         setFormError('');
         setModalOpen(true);
     };
 
     const openEditModal = (user) => {
+        const fullName = (user.name || '').trim();
+        const nameParts = fullName ? fullName.split(' ', 2) : [];
         setEditUser(user);
-        setFormData({ name: user.name, email: user.email, password: '', role: user.role });
+        setFormData({
+            firstName: user.firstName || nameParts[0] || '',
+            lastName: user.lastName || nameParts.slice(1).join(' ') || '',
+            email: user.email,
+            password: '',
+            role: user.role,
+        });
         setFormError('');
         setModalOpen(true);
     };
@@ -74,7 +95,7 @@ export default function UserManagement() {
             setModalOpen(false);
             fetchUsers(pagination.page);
         } catch (err) {
-            setFormError(err.response?.data?.message || 'Operation failed');
+            setFormError(getApiErrorMessage(err, 'Operation failed'));
         } finally {
             setSaving(false);
         }
@@ -146,10 +167,10 @@ export default function UserManagement() {
                                         <td className="px-5 py-3.5">
                                             <div className="flex items-center gap-3">
                                                 <div className="w-9 h-9 rounded-full bg-gradient-to-br from-amber-300 to-terracotta-400 flex items-center justify-center text-white text-sm font-semibold flex-shrink-0">
-                                                    {u.name?.charAt(0)?.toUpperCase() || 'U'}
+                                                    {getFullName(u)?.charAt(0)?.toUpperCase() || 'U'}
                                                 </div>
                                                 <div>
-                                                    <p className="text-sm font-medium text-charcoal-800">{u.name}</p>
+                                                    <p className="text-sm font-medium text-charcoal-800">{getFullName(u)}</p>
                                                     <p className="text-xs text-charcoal-500">{u.email}</p>
                                                 </div>
                                             </div>
@@ -195,9 +216,15 @@ export default function UserManagement() {
                 )}
                 <form onSubmit={handleSave} className="space-y-4">
                     <Input
-                        label="Name"
-                        value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                        label="First Name"
+                        value={formData.firstName}
+                        onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                        required
+                    />
+                    <Input
+                        label="Last Name"
+                        value={formData.lastName}
+                        onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
                         required
                     />
                     <Input
