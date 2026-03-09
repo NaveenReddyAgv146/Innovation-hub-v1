@@ -30,7 +30,7 @@ export default function PocDetail() {
             const { data } = await pocService.getById(id);
             setPoc(data.poc);
         } catch {
-            setError('Failed to load POC');
+            setError('Failed to load innovation brief');
         } finally {
             setLoading(false);
         }
@@ -66,13 +66,13 @@ export default function PocDetail() {
     }, [canViewVoters, fetchVoters]);
 
     const handleDelete = async () => {
-        if (!window.confirm('Are you sure you want to delete this POC?')) return;
+        if (!window.confirm('Are you sure you want to delete this innovation brief?')) return;
         setDeleting(true);
         try {
             await pocService.delete(id);
             navigate('/pocs');
         } catch {
-            setError('Failed to delete POC');
+            setError('Failed to delete innovation brief');
             setDeleting(false);
         }
     };
@@ -111,7 +111,7 @@ export default function PocDetail() {
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
                 </svg>
-                Back to POCs
+                Back to Innovations
             </Link>
 
             {/* Thumbnail */}

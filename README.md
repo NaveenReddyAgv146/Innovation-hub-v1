@@ -14,6 +14,13 @@ POC-git/
   client/            # React frontend
   backend-fastapi/   # FastAPI backend
 ```
+## backend
+cd "c:\Users\Admin_Agivant\Documents\My Work\POC-Rest\POC_upload\backend-fastapi"
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8010
+
+## frontend
+cd "c:\Users\Admin_Agivant\Documents\My Work\POC-Rest\POC_upload\client"
+npm.cmd run dev -- --host 127.0.0.1 --port 5175 --strictPort
 
 ## Features
 

@@ -23,11 +23,11 @@ export default function Layout({ children }) {
 
     const navItems = [
         { path: '/dashboard', label: 'Dashboard', icon: HomeIcon },
-        { path: '/pocs', label: 'POCs', icon: BoltIcon },
+        { path: '/pocs', label: 'Innovations', icon: BoltIcon },
     ];
 
-    if (user?.role === 'admin' || user?.role === 'developer' || user?.role === 'viewer') {
-        navItems.push({ path: '/pocs/new', label: 'Submit POC', icon: PlusIcon });
+    if (user?.role === 'admin' || user?.role === 'developer') {
+        navItems.push({ path: '/pocs/new', label: 'New Innovation Brief', icon: PlusIcon });
     }
 
     if (user?.role === 'admin') {

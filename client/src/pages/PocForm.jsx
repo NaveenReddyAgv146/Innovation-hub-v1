@@ -63,7 +63,7 @@ export default function PocForm() {
             });
             if (poc.thumbnail) setPreview(poc.thumbnail);
         } catch {
-            setError('Failed to load POC');
+            setError('Failed to load innovation brief');
         } finally {
             setFetching(false);
         }
@@ -140,7 +140,7 @@ export default function PocForm() {
             }
             navigate('/pocs');
         } catch (err) {
-            setError(getApiErrorMessage(err, `Failed to ${isEdit ? 'update' : 'create'} POC`));
+            setError(getApiErrorMessage(err, `Failed to ${isEdit ? 'update' : 'create'} innovation brief`));
         } finally {
             setLoading(false);
         }
@@ -151,7 +151,7 @@ export default function PocForm() {
     return (
         <div className="max-w-2xl mx-auto">
             <h1 className="text-2xl font-bold text-charcoal-800 mb-6">
-                {isEdit ? 'Edit POC' : 'Submit New Idea'}
+                {isEdit ? 'Edit Innovation Brief' : 'Create Innovation Brief'}
             </h1>
 
             <Card hover={false} className="p-6 sm:p-8">
@@ -307,7 +307,7 @@ export default function PocForm() {
 
                     <div className="flex gap-3 pt-2">
                         <Button type="submit" loading={loading}>
-                            {isEdit ? 'Update POC' : 'Submit POC'}
+                            {isEdit ? 'Update Innovation Brief' : 'Create Innovation Brief'}
                         </Button>
                         <Button type="button" variant="ghost" onClick={() => navigate('/pocs')}>
                             Cancel

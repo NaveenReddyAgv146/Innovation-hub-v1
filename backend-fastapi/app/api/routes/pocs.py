@@ -227,15 +227,13 @@ async def create_poc(
     repositoryLink: str = Form(default=""),
     status_value: str = Form(default="draft", alias="status"),
     thumbnail: UploadFile | None = File(default=None),
-    current_user=Depends(require_roles("admin", "developer", "viewer")),
+    current_user=Depends(require_roles("admin", "developer")),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     if customerClassification not in {"Existing", "New"}:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid customer classification")
 
-    if current_user.get("role") == "viewer":
-        status_value = "draft"
-    elif status_value not in {"draft", "published"}:
+    if status_value not in {"draft", "published"}:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid status")
 
     thumbnail_path = await save_thumbnail(thumbnail)

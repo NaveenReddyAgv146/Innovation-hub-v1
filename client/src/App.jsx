@@ -59,7 +59,7 @@ export default function App() {
             path="/pocs/new"
             element={
               <AppLayout>
-                <RoleRoute roles={['admin', 'developer', 'viewer']}>
+                <RoleRoute roles={['admin', 'developer']}>
                   <PocForm />
                 </RoleRoute>
               </AppLayout>

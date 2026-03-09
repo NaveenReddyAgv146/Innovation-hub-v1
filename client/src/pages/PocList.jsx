@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import useAuthStore from '../store/authStore';
 import { pocService } from '../services/endpoints';
 import Card from '../components/ui/Card';
@@ -10,6 +10,7 @@ import Spinner from '../components/ui/Spinner';
 import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
 import Pagination from '../components/ui/Pagination';
+import { getThumbnailGradient } from '../utils/thumbnailGradient';
 
 const STATUS_OPTIONS = ['all', 'published', 'draft'];
 const getAuthorName = (author = {}) =>
@@ -17,10 +18,13 @@ const getAuthorName = (author = {}) =>
 
 export default function PocList() {
     const user = useAuthStore((s) => s.user);
+    const [searchParams, setSearchParams] = useSearchParams();
+    const statusFromUrl = (searchParams.get('status') || 'all').toLowerCase();
+    const initialStatus = STATUS_OPTIONS.includes(statusFromUrl) ? statusFromUrl : 'all';
     const [pocs, setPocs] = useState([]);
     const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
     const [search, setSearch] = useState('');
-    const [statusFilter, setStatusFilter] = useState('all');
+    const [statusFilter, setStatusFilter] = useState(initialStatus);
     const [tagFilter, setTagFilter] = useState('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -39,7 +43,7 @@ export default function PocList() {
             setPocs(data.pocs);
             setPagination(data.pagination);
         } catch {
-            setError('Failed to load POCs');
+            setError('Failed to load innovation briefs');
         } finally {
             setLoading(false);
         }
@@ -49,6 +53,12 @@ export default function PocList() {
         const debounce = setTimeout(() => fetchPocs(1), 300);
         return () => clearTimeout(debounce);
     }, [fetchPocs]);
+
+    useEffect(() => {
+        if (statusFilter !== initialStatus) {
+            setStatusFilter(initialStatus);
+        }
+    }, [initialStatus, statusFilter]);
 
     const canVoteOnPoc = (poc) => {
         if (user?.role === 'admin') return false;
@@ -88,14 +98,14 @@ export default function PocList() {
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-charcoal-800">Proof of Concepts</h1>
+                    <h1 className="text-2xl font-bold text-charcoal-800">Innovation Briefs</h1>
                     <p className="text-charcoal-500 text-sm mt-0.5">
-                        {pagination.total} POC{pagination.total !== 1 ? 's' : ''} total
+                        {pagination.total} innovation brief{pagination.total !== 1 ? 's' : ''} total
                     </p>
                 </div>
-                {(user?.role === 'admin' || user?.role === 'developer' || user?.role === 'viewer') && (
+                {(user?.role === 'admin' || user?.role === 'developer') && (
                     <Link to="/pocs/new">
-                        <Button>+ Submit POC</Button>
+                        <Button>+ New Innovation Brief</Button>
                     </Link>
                 )}
             </div>
@@ -119,7 +129,14 @@ export default function PocList() {
                         {STATUS_OPTIONS.map((s) => (
                             <button
                                 key={s}
-                                onClick={() => setStatusFilter(s)}
+                                onClick={() => {
+                                    setStatusFilter(s);
+                                    setSearchParams((prev) => {
+                                        const next = new URLSearchParams(prev);
+                                        next.set('status', s);
+                                        return next;
+                                    });
+                                }}
                                 className={`px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200
                   ${statusFilter === s
                                         ? 'bg-terracotta-500 text-white shadow-sm'
@@ -139,15 +156,15 @@ export default function PocList() {
                 </div>
             </Card>
 
-            {/* POC Grid */}
+            {/* Innovation Grid */}
             {loading ? (
                 <Spinner size="lg" className="mt-12" />
             ) : error ? (
                 <ErrorState message={error} onRetry={() => fetchPocs(1)} />
             ) : pocs.length === 0 ? (
                 <EmptyState
-                    title="No POCs found"
-                    message="Try adjusting your search or filters, or submit a new POC."
+                    title="No innovation briefs found"
+                    message="Try adjusting your search or filters, or create a new innovation brief."
                     icon={
                         <svg className="w-16 h-16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
@@ -158,16 +175,17 @@ export default function PocList() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                     {pocs.map((poc) => {
                         const authorName = getAuthorName(poc.author);
+                        const thumbnailGradient = getThumbnailGradient(poc._id || poc.title);
                         return (
                         <Link key={poc._id} to={`/pocs/${poc._id}`}>
                             <Card className="overflow-hidden h-full flex flex-col">
                                 {/* Thumbnail */}
-                                <div className="aspect-video bg-gradient-to-br from-sand-100 to-sand-200 relative overflow-hidden">
+                                <div className={`aspect-video bg-gradient-to-br ${thumbnailGradient} relative overflow-hidden`}>
                                     {poc.thumbnail ? (
                                         <img src={poc.thumbnail} alt={poc.title} className="w-full h-full object-cover" />
                                     ) : (
                                         <div className="w-full h-full flex items-center justify-center">
-                                            <svg className="w-10 h-10 text-sand-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                            <svg className="w-10 h-10 text-white/85" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                                                 <path strokeLinecap="round" strokeLinejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
                                             </svg>
                                         </div>
