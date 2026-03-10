@@ -1,34 +1,33 @@
-# POC Upload Platform
+# Innovation Garage v1
 
-Full-stack Proof of Concept (POC) management app with role-based access, image uploads, and admin workflows.
+Innovation Hub is a full-stack platform for collecting, reviewing, publishing, and tracking internal POC ideas with role-based access control.
 
-## Stack
+## What This App Supports
 
-- Frontend: React 19, Vite 7, React Router, Zustand, Axios, Tailwind CSS
-- Backend: FastAPI, Motor (MongoDB), JWT auth, role-based authorization
+- JWT authentication (`register`, `login`, `refresh`, `logout`, `me`)
+- Role-based flows for `admin`, and `viewer`
+- POC CRUD with status (`draft` / `published`)
+- Admin-only publish workflow through Idea Reviews
+- Interest voting on published ideas (non-admin, non-owner)
+- User management (admin only)
+- Image upload for POC thumbnails (`/uploads`)
+- Dark mode with persisted preference
+- Publish success notification in Idea Reviews
+- Delete confirmation modal for POC deletion
 
-## Repository Structure
+## Tech Stack
+
+- Frontend: React 19, Vite 7, React Router, Axios, Tailwind CSS v4
+- Backend: FastAPI, MongoDB, python, passlib/bcrypt
+- Database: MongoDB
+
+## Project Structure
 
 ```text
-POC-git/
-  client/            # React frontend
-  backend-fastapi/   # FastAPI backend
+POC_upload/
+  client/            # Frontend (React + Vite)
+  backend-fastapi/   # Backend (FastAPI)
 ```
-## backend
-cd "c:\Users\Admin_Agivant\Documents\My Work\POC-Rest\POC_upload\backend-fastapi"
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8010
-
-## frontend
-cd "c:\Users\Admin_Agivant\Documents\My Work\POC-Rest\POC_upload\client"
-npm.cmd run dev -- --host 127.0.0.1 --port 5175 --strictPort
-
-## Features
-
-- JWT auth: register, login, refresh, logout, current-user profile
-- Roles: `admin`, `developer`, `viewer`
-- POC workflows: create, edit, delete, list, detail, publish, upvote
-- User management for admins
-- Image upload support via `/uploads`
 
 ## Prerequisites
 
@@ -36,26 +35,56 @@ npm.cmd run dev -- --host 127.0.0.1 --port 5175 --strictPort
 - Python 3.10+
 - MongoDB (local or hosted)
 
-## Local Development Setup
+## Create MongoDB Instance
 
-### 1. Clone and move into the project
+You can use either local MongoDB or MongoDB Atlas.
 
-```bash
-git clone https://github.com/Yash-Anchule/POC_upload.git
-cd POC_upload
+### Option A: Local MongoDB (quickest for development)
+
+1. Install MongoDB Community Edition and MongoDB Compass.
+2. Start MongoDB service (Windows):
+
+```powershell
+net start MongoDB
 ```
 
-### 2. Backend setup (FastAPI)
+3. Use this connection string in backend `.env`:
 
-```bash
+```env
+MONGODB_URI=mongodb://127.0.0.1:27017/poc_showcase
+MONGODB_DB_NAME=poc_showcase
+```
+
+### Option B: MongoDB Atlas (cloud)
+
+1. Create account at `https://www.mongodb.com/atlas`.
+2. Create a new project and a free cluster (M0).
+3. In Atlas:
+- Create a database user (save username/password).
+- Add your IP in Network Access (or allow `0.0.0.0/0` only for temporary dev).
+4. Click `Connect` -> `Drivers` and copy the URI.
+5. Replace placeholders and set backend `.env`:
+
+```env
+MONGODB_URI=mongodb+srv://<username>:<password>@<cluster-url>/poc_showcase?retryWrites=true&w=majority
+MONGODB_DB_NAME=poc_showcase
+```
+
+6. If your password has special characters, URL-encode it.
+
+## End-to-End Local Setup (Windows PowerShell)
+
+### 1. Backend Setup
+
+```powershell
 cd backend-fastapi
-python3 -m venv .venv
-source .venv/bin/activate
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-cp .env.example .env
+copy .env.example .env
 ```
 
-Update `backend-fastapi/.env` as needed:
+Edit `backend-fastapi/.env`:
 
 ```env
 APP_NAME=POC FastAPI Backend
@@ -63,7 +92,7 @@ APP_ENV=development
 PORT=8000
 MONGODB_URI=mongodb://127.0.0.1:27017/poc_showcase
 MONGODB_DB_NAME=poc_showcase
-CLIENT_URL=http://localhost:5173
+CLIENT_URL=http://localhost:5175
 JWT_ACCESS_SECRET=replace_with_a_secure_access_secret
 JWT_REFRESH_SECRET=replace_with_a_secure_refresh_secret
 JWT_ACCESS_EXPIRY_MINUTES=15
@@ -72,49 +101,71 @@ JWT_REFRESH_EXPIRY_DAYS=7
 
 Run backend:
 
-```bash
-uvicorn app.main:app --reload --port 8000
+```powershell
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8010
 ```
 
-### 3. Frontend setup (React)
+### 2. Frontend Setup
 
-In a new terminal:
-
-```bash
+```powershell
 cd client
 npm install
-npm run dev
 ```
 
-Frontend runs at `http://localhost:5173` and proxies `/api` + `/uploads` to `http://localhost:8000`.
+Create or update `client/.env`:
 
-## API Base
+```env
+VITE_BACKEND_URL=http://localhost:8010
+```
 
-- Base URL: `/api`
-- Health check: `GET /api/health`
+Run frontend:
 
-## Default Admin Seed
+```powershell
+npm run dev -- --host 127.0.0.1 --port 5175 --strictPort
+```
 
-```bash
+The frontend proxies `/api` and `/uploads` to `VITE_BACKEND_URL`.
+
+## Seed Admin User
+
+```powershell
 cd backend-fastapi
-source .venv/bin/activate
+.\.venv\Scripts\Activate.ps1
 python -m scripts.seed_admin
 ```
 
-Default credentials:
+Default admin credentials:
 
 - Email: `admin@pocshowcase.com`
 - Password: `admin123`
 
-## Production Notes
+## Role Behavior
 
-- Set strong JWT secrets
-- Restrict `CLIENT_URL` to your frontend domain
-- Configure persistent storage for `backend-fastapi/uploads`
-- Run FastAPI with a production ASGI setup (for example, `gunicorn` + `uvicorn` workers)
+- `admin`: manage users, review/publish ideas, create/edit/delete any POC, view interested users
+- `developer`: create POCs, edit/delete own POCs, mark interest on other published POCs ( next versions)
+- `viewer`: browse published POCs, submit draft ideas, mark interest on eligible published POCs
 
-## License
+## API Overview
 
-ISC
+Base prefix: `/api`
 
+- Health: `GET /health`
+- Auth: `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `GET /auth/me`
+- Users: `GET /users`, `GET /users/{user_id}`, `POST /users`, `PUT /users/{user_id}`, `DELETE /users/{user_id}`
+- POCs: `GET /pocs`, `GET /pocs/{poc_id}`, `POST /pocs`, `PUT /pocs/{poc_id}`, `DELETE /pocs/{poc_id}`, `POST /pocs/{poc_id}/publish`, `POST /pocs/{poc_id}/upvote`, `DELETE /pocs/{poc_id}/upvote`, `GET /pocs/{poc_id}/voters`
 
+Uploads are served at `/uploads`.
+
+## Frontend Scripts
+
+From `client/`:
+
+- `npm run dev` - start dev server
+- `npm run build` - build production bundle
+- `npm run preview` - preview production build
+- `npm run lint` - run eslint
+
+## Backend Run Notes
+
+- `PORT` in `.env` is app config, but local run port is controlled by uvicorn command.
+- Keep `CLIENT_URL` and frontend dev URL aligned (`http://localhost:5175` in this setup).

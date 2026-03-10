@@ -1,11 +1,16 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import useAuthStore from '../store/authStore';
 import { authService } from '../services/endpoints';
 import { COMPANY_LOGO_URL, COMPANY_NAME } from '../config/branding';
 
+const THEME_STORAGE_KEY = 'poc_theme';
+
 export default function Layout({ children }) {
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [theme, setTheme] = useState(() =>
+        localStorage.getItem(THEME_STORAGE_KEY) === 'dark' ? 'dark' : 'light'
+    );
     const user = useAuthStore((s) => s.user);
     const logoutStore = useAuthStore((s) => s.logout);
     const navigate = useNavigate();
@@ -36,6 +41,17 @@ export default function Layout({ children }) {
     }
 
     const isActive = (path) => location.pathname === path || (path !== '/dashboard' && location.pathname.startsWith(path) && path !== '/pocs/new');
+    const isDark = theme === 'dark';
+
+    useEffect(() => {
+        const root = document.documentElement;
+        root.classList.toggle('dark', isDark);
+        localStorage.setItem(THEME_STORAGE_KEY, theme);
+    }, [theme, isDark]);
+
+    const toggleTheme = () => {
+        setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+    };
 
     return (
         <div className="min-h-screen bg-warm-white">
@@ -51,7 +67,14 @@ export default function Layout({ children }) {
                         </svg>
                     </button>
                     <span className="font-bold text-terracotta-600 text-lg">{COMPANY_NAME}</span>
-                    <div className="w-9" />
+                    <button
+                        onClick={toggleTheme}
+                        className="p-2 rounded-lg text-charcoal-600 hover:bg-sand-100"
+                        aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+                        title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+                    >
+                        {isDark ? <SunIcon /> : <MoonIcon />}
+                    </button>
                 </div>
             </header>
 
@@ -107,6 +130,13 @@ export default function Layout({ children }) {
                             <p className="text-xs text-charcoal-500 capitalize">{user?.role}</p>
                         </div>
                     </div>
+                    <button
+                        onClick={toggleTheme}
+                        className="w-full mb-2 flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-charcoal-600 hover:bg-sand-100 hover:text-charcoal-800 transition-colors"
+                    >
+                        {isDark ? <SunIcon /> : <MoonIcon />}
+                        {isDark ? 'Light Mode' : 'Dark Mode'}
+                    </button>
                     <button
                         onClick={handleLogout}
                         className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium text-charcoal-600 hover:bg-coral-50 hover:text-coral-600 transition-colors"
@@ -167,6 +197,22 @@ function ReviewIcon({ active }) {
     return (
         <svg className={`w-5 h-5 ${active ? 'text-terracotta-500' : 'text-charcoal-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+    );
+}
+
+function MoonIcon() {
+    return (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 12.8A9 9 0 1111.2 3 7 7 0 0021 12.8z" />
+        </svg>
+    );
+}
+
+function SunIcon() {
+    return (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2m0 14v2m9-9h-2M5 12H3m15.364 6.364l-1.414-1.414M7.05 7.05 5.636 5.636m12.728 0-1.414 1.414M7.05 16.95l-1.414 1.414M12 8a4 4 0 100 8 4 4 0 000-8z" />
         </svg>
     );
 }

@@ -50,6 +50,41 @@
   --color-charcoal-400: #64748b;
 }
 
+:root {
+  color-scheme: light;
+}
+
+.dark {
+  color-scheme: dark;
+
+  --color-terracotta-50: #334155;
+  --color-terracotta-100: #475569;
+  --color-terracotta-200: #64748b;
+  --color-terracotta-300: #60a5fa;
+  --color-terracotta-400: #3b82f6;
+  --color-terracotta-500: #2563eb;
+  --color-terracotta-600: #1d4ed8;
+  --color-terracotta-700: #1e40af;
+  --color-terracotta-800: #1e3a8a;
+  --color-terracotta-900: #172554;
+
+  --color-sand-50: #1e293b;
+  --color-sand-100: #273449;
+  --color-sand-200: #334155;
+  --color-sand-300: #64748b;
+  --color-sand-400: #94a3b8;
+
+  --color-warm-white: #111827;
+  --color-warm-50: #1f2937;
+  --color-warm-100: #273449;
+
+  --color-charcoal-800: #f8fafc;
+  --color-charcoal-700: #e2e8f0;
+  --color-charcoal-600: #cbd5e1;
+  --color-charcoal-500: #b8c6da;
+  --color-charcoal-400: #93a9c6;
+}
+
 /* ============================================
    Global Base Styles
    ============================================ */
@@ -60,6 +95,22 @@ body {
   color: var(--color-charcoal-800);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+.dark .bg-white {
+  background-color: #1f2937;
+}
+
+.dark .bg-white\/80 {
+  background-color: rgb(31 41 55 / 0.88);
+}
+
+.dark .bg-white\/12 {
+  background-color: rgb(51 65 85 / 0.55);
+}
+
+.dark .border-white\/20 {
+  border-color: rgb(148 163 184 / 0.35);
 }
 
 /* Smooth transitions on interactive elements */

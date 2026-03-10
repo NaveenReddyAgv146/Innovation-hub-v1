@@ -1,8 +1,8 @@
 const colorMap = {
-    terracotta: 'bg-terracotta-100 text-terracotta-700',
+    terracotta: 'bg-terracotta-100 text-terracotta-700 dark:bg-terracotta-700 dark:text-white',
     amber: 'bg-amber-100 text-amber-700',
     coral: 'bg-coral-100 text-coral-600',
-    sand: 'bg-sand-200 text-charcoal-700',
+    sand: 'bg-sand-200 text-charcoal-700 dark:bg-sand-300 dark:text-charcoal-800',
     green: 'bg-emerald-100 text-emerald-700',
 };
 

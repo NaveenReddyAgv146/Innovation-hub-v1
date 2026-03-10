@@ -6,6 +6,7 @@ import Badge from '../components/ui/Badge';
 import Button from '../components/ui/Button';
 import Spinner from '../components/ui/Spinner';
 import ErrorState from '../components/ui/ErrorState';
+import Modal from '../components/ui/Modal';
 
 const getAuthorName = (author = {}) =>
     [author.firstName, author.lastName].filter(Boolean).join(' ').trim() || author.name || 'Unknown';
@@ -18,6 +19,7 @@ export default function PocDetail() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [deleting, setDeleting] = useState(false);
+    const [deleteModalOpen, setDeleteModalOpen] = useState(false);
     const [voting, setVoting] = useState(false);
     const [voters, setVoters] = useState([]);
     const [votersLoading, setVotersLoading] = useState(false);
@@ -65,16 +67,24 @@ export default function PocDetail() {
         if (canViewVoters) fetchVoters();
     }, [canViewVoters, fetchVoters]);
 
-    const handleDelete = async () => {
-        if (!window.confirm('Are you sure you want to delete this innovation brief?')) return;
+    const handleDelete = () => {
+        setDeleteModalOpen(true);
+    };
+
+    const confirmDelete = async () => {
         setDeleting(true);
         try {
             await pocService.delete(id);
+            setDeleteModalOpen(false);
             navigate('/pocs');
         } catch {
             setError('Failed to delete innovation brief');
             setDeleting(false);
         }
+    };
+
+    const closeDeleteModal = () => {
+        if (!deleting) setDeleteModalOpen(false);
     };
 
     const handleToggleInterest = async () => {
@@ -293,6 +303,21 @@ export default function PocDetail() {
                     )}
                 </div>
             )}
+
+            <Modal isOpen={deleteModalOpen} onClose={closeDeleteModal} title="Delete Innovation Brief" size="sm">
+                <p className="text-sm text-charcoal-600">
+                    Are you sure you want to delete <span className="font-semibold text-charcoal-800">{poc.title}</span>?
+                    This action cannot be undone.
+                </p>
+                <div className="mt-5 flex justify-end gap-2">
+                    <Button type="button" variant="ghost" size="sm" disabled={deleting} onClick={closeDeleteModal}>
+                        Cancel
+                    </Button>
+                    <Button type="button" variant="danger" size="sm" loading={deleting} onClick={confirmDelete}>
+                        Delete
+                    </Button>
+                </div>
+            </Modal>
         </div>
     );
 }

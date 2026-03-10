@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { pocService } from '../services/endpoints';
 import Card from '../components/ui/Card';
@@ -13,6 +13,8 @@ export default function IdeaReviews() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [publishingId, setPublishingId] = useState('');
+    const [publishToast, setPublishToast] = useState({ visible: false, title: '' });
+    const publishToastTimerRef = useRef(null);
 
     const fetchIdeas = useCallback(async () => {
         setLoading(true);
@@ -31,12 +33,25 @@ export default function IdeaReviews() {
         fetchIdeas();
     }, [fetchIdeas]);
 
+    useEffect(() => () => {
+        if (publishToastTimerRef.current) {
+            clearTimeout(publishToastTimerRef.current);
+        }
+    }, []);
+
     const handlePublish = async (idea) => {
         setPublishingId(idea._id);
         setError('');
         try {
             await pocService.publish(idea._id);
             setIdeas((prev) => prev.filter((item) => item._id !== idea._id));
+            setPublishToast({ visible: true, title: idea.title });
+            if (publishToastTimerRef.current) {
+                clearTimeout(publishToastTimerRef.current);
+            }
+            publishToastTimerRef.current = setTimeout(() => {
+                setPublishToast({ visible: false, title: '' });
+            }, 2600);
         } catch {
             setError('Failed to publish idea');
         } finally {
@@ -46,6 +61,22 @@ export default function IdeaReviews() {
 
     return (
         <div className="space-y-6">
+            {publishToast.visible && (
+                <div className="fixed top-5 right-5 z-50 w-[min(92vw,26rem)] rounded-2xl border border-emerald-200 bg-white px-4 py-3 shadow-lg animate-[fade-in_200ms_ease-out]">
+                    <div className="flex items-start gap-3">
+                        <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-white">
+                            <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                <path fillRule="evenodd" d="M16.704 5.29a1 1 0 010 1.42l-8.01 8.01a1 1 0 01-1.415 0L3.296 10.74a1 1 0 011.414-1.415l3.277 3.276 7.302-7.302a1 1 0 011.415-.01z" clipRule="evenodd" />
+                            </svg>
+                        </div>
+                        <div className="min-w-0">
+                            <p className="text-sm font-semibold text-charcoal-800">Published successfully</p>
+                            <p className="truncate text-xs text-charcoal-500">{publishToast.title}</p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div>
                     <h1 className="text-2xl font-bold text-charcoal-800">Idea Reviews</h1>

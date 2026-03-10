@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Spinner from './components/ui/Spinner';
 import ProtectedRoute from './components/guards/ProtectedRoute';
@@ -14,6 +14,7 @@ const PocDetail = lazy(() => import('./pages/PocDetail'));
 const PocForm = lazy(() => import('./pages/PocForm'));
 const UserManagement = lazy(() => import('./pages/UserManagement'));
 const IdeaReviews = lazy(() => import('./pages/IdeaReviews'));
+const THEME_STORAGE_KEY = 'poc_theme';
 
 function PageLoader() {
   return <Spinner size="lg" className="mt-24" />;
@@ -28,6 +29,17 @@ function AppLayout({ children }) {
 }
 
 export default function App() {
+  useEffect(() => {
+    const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+    const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const initialTheme = savedTheme === 'dark' || savedTheme === 'light'
+      ? savedTheme
+      : (systemPrefersDark ? 'dark' : 'light');
+
+    document.documentElement.classList.toggle('dark', initialTheme === 'dark');
+    if (!savedTheme) localStorage.setItem(THEME_STORAGE_KEY, initialTheme);
+  }, []);
+
   return (
     <BrowserRouter>
       <Suspense fallback={<PageLoader />}>

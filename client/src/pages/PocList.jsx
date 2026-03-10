@@ -11,6 +11,7 @@ import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
 import Pagination from '../components/ui/Pagination';
 import { getThumbnailGradient } from '../utils/thumbnailGradient';
+import { getPocIconPaths } from '../utils/pocIcon';
 
 const STATUS_OPTIONS = ['all', 'published', 'draft'];
 const getAuthorName = (author = {}) =>
@@ -176,6 +177,7 @@ export default function PocList() {
                     {pocs.map((poc) => {
                         const authorName = getAuthorName(poc.author);
                         const thumbnailGradient = getThumbnailGradient(poc._id || poc.title);
+                        const pocIconPaths = getPocIconPaths(poc._id || poc.title);
                         return (
                         <Link key={poc._id} to={`/pocs/${poc._id}`}>
                             <Card className="overflow-hidden h-full flex flex-col">
@@ -185,8 +187,10 @@ export default function PocList() {
                                         <img src={poc.thumbnail} alt={poc.title} className="w-full h-full object-cover" />
                                     ) : (
                                         <div className="w-full h-full flex items-center justify-center">
-                                            <svg className="w-10 h-10 text-white/85" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                                            <svg className="w-10 h-10 text-white/85" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}>
+                                                {pocIconPaths.map((d, idx) => (
+                                                    <path key={`${poc._id}-icon-${idx}`} strokeLinecap="round" strokeLinejoin="round" d={d} />
+                                                ))}
                                             </svg>
                                         </div>
                                     )}
