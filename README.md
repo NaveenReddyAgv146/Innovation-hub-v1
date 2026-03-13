@@ -102,7 +102,7 @@ JWT_REFRESH_EXPIRY_DAYS=7
 Run backend:
 
 ```powershell
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8010
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8010
 ```
 
 ### 2. Frontend Setup

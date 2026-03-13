@@ -15,7 +15,7 @@ class Database:
             client_kwargs["tls"] = True
             client_kwargs["tlsAllowInvalidCertificates"] = False
             client_kwargs["tlsAllowInvalidHostnames"] = True
-            #client_kwargs["tlsCAFile"] = certifi.where()
+            # client_kwargs["tlsCAFile"] = certifi.where()
 
         self.client = AsyncIOMotorClient(settings.mongodb_uri, **client_kwargs)
         self.db = self.client[settings.mongodb_db_name]
