@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import os
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -18,13 +19,25 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
-UPLOADS_DIR = Path(__file__).resolve().parents[1] / "uploads"
+if settings.upload_dir:
+    UPLOADS_DIR = Path(settings.upload_dir)
+elif os.getenv("VERCEL"):
+    UPLOADS_DIR = Path("/tmp/uploads")
+else:
+    UPLOADS_DIR = Path(__file__).resolve().parents[1] / "uploads"
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+
+allowed_origins = [settings.client_url]
+if settings.client_urls:
+    allowed_origins.extend(
+        [origin.strip() for origin in settings.client_urls.split(",") if origin.strip()]
+    )
+allowed_origins = list(dict.fromkeys(allowed_origins))
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.client_url],
-    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
+    allow_origins=allowed_origins,
+    allow_origin_regex=settings.client_url_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

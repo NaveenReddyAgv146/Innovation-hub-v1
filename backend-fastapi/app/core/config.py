@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     mongodb_db_name: str = "poc_showcase"
 
     client_url: str = "http://localhost:5173"
+    client_urls: str = ""
+    client_url_regex: str = r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
+    upload_dir: str = ""
 
     jwt_access_secret: str = "change_this_access_secret"
     jwt_refresh_secret: str = "change_this_refresh_secret"

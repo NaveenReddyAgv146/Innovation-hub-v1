@@ -169,3 +169,59 @@ From `client/`:
 
 - `PORT` in `.env` is app config, but local run port is controlled by uvicorn command.
 - Keep `CLIENT_URL` and frontend dev URL aligned (`http://localhost:5175` in this setup).
+
+## Deploy to Vercel (Frontend + Backend)
+
+Deploy as **2 Vercel projects** from the same GitHub repo:
+
+1. Backend project (root: `backend-fastapi`)
+2. Frontend project (root: `client`)
+
+### 1. Deploy Backend (FastAPI) on Vercel
+
+Backend Vercel config files are included:
+
+- `backend-fastapi/vercel.json`
+- `backend-fastapi/api/index.py`
+
+In Vercel:
+
+1. Create new project -> import this repo.
+2. Set **Root Directory** to `backend-fastapi`.
+3. Add environment variables:
+- `MONGODB_URI`
+- `MONGODB_DB_NAME`
+- `JWT_ACCESS_SECRET`
+- `JWT_REFRESH_SECRET`
+- `JWT_ACCESS_EXPIRY_MINUTES` (for example `15`)
+- `JWT_REFRESH_EXPIRY_DAYS` (for example `7`)
+- `CLIENT_URL` (your frontend production URL, later from frontend project)
+- Optional: `CLIENT_URLS` (comma-separated extra origins)
+- Optional: `CLIENT_URL_REGEX` (default already allows localhost)
+4. Deploy.
+
+After deploy, test:
+
+- `https://<your-backend>.vercel.app/api/health`
+
+### 2. Deploy Frontend (Vite) on Vercel
+
+1. Create another Vercel project from same repo.
+2. Set **Root Directory** to `client`.
+3. Add env var:
+- `VITE_API_BASE_URL=https://<your-backend>.vercel.app/api`
+4. Deploy.
+
+### 3. Update Backend CORS
+
+After frontend URL is live:
+
+1. Go back to backend project env vars.
+2. Set `CLIENT_URL=https://<your-frontend>.vercel.app`
+3. Redeploy backend.
+
+## Important Serverless Note
+
+- Current thumbnail uploads are stored on local filesystem.
+- On Vercel, filesystem is ephemeral (`/tmp`), so uploaded files are not permanent.
+- For production, move uploads to external storage (Cloudinary, S3, or similar).
