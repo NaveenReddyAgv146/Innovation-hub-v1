@@ -19,35 +19,51 @@ const getApiErrorMessage = (err, fallback) => {
     return fallback;
 };
 
-function StepChip({ label, active, done }) {
+function StepChip({ label, active, done, onClick, icon }) {
     return (
-        <div
-            className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition-colors ${
-                active
-                    ? 'bg-terracotta-500 text-white'
-                    : done
-                        ? 'bg-terracotta-100 text-terracotta-700'
-                        : 'bg-sand-100 text-charcoal-500'
-            }`}
-        >
-            {label}
+        <div className="relative z-10 flex flex-col items-center gap-2">
+            <button
+                type="button"
+                onClick={onClick}
+                className={`h-14 w-14 rounded-full border-2 transition-all duration-200 flex items-center justify-center ${
+                    active
+                        ? 'border-terracotta-400 bg-terracotta-500 text-white shadow-md ring-4 ring-terracotta-100'
+                        : done
+                            ? 'border-terracotta-300 bg-terracotta-100 text-terracotta-600'
+                            : 'border-sand-200 bg-sand-100 text-charcoal-400 hover:border-sand-300'
+                }`}
+                aria-label={label}
+            >
+                {icon}
+            </button>
+            <span className={`text-xs font-semibold ${active ? 'text-terracotta-600' : 'text-charcoal-500'}`}>{label}</span>
         </div>
     );
 }
 
-function StatusOption({ label, value, checked, onChange, description }) {
+function StatusOption({ label, value, checked, onChange, description, accent = 'draft' }) {
+    const selectedClasses = {
+        draft: 'border-orange-300 bg-orange-50 text-orange-700 ring-2 ring-orange-100',
+        published: 'border-emerald-300 bg-emerald-50 text-emerald-700 ring-2 ring-emerald-100',
+    };
+
+    const dotClasses = {
+        draft: 'border-orange-300 bg-orange-500',
+        published: 'border-emerald-300 bg-emerald-500',
+    };
+
     return (
         <label
             className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-4 transition-all duration-200 ${
                 checked
-                    ? 'border-terracotta-300 bg-terracotta-50 text-charcoal-800 ring-2 ring-terracotta-100'
+                    ? selectedClasses[accent]
                     : 'border-sand-200 bg-white text-charcoal-600 hover:border-sand-300'
             }`}
         >
             <input type="radio" name="status" value={value} checked={checked} onChange={onChange} className="sr-only" />
             <span
                 className={`mt-1 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
-                    checked ? 'border-terracotta-400 bg-terracotta-500' : 'border-sand-300 bg-white'
+                    checked ? dotClasses[accent] : 'border-sand-300 bg-white'
                 }`}
             >
                 <span className={`h-1.5 w-1.5 rounded-full ${checked ? 'bg-white' : 'bg-transparent'}`} />
@@ -77,7 +93,7 @@ export default function PocForm() {
         techStack: [],
         demoLink: '',
         repositoryLink: '',
-        status: 'draft',
+        status: '',
     });
     const [tagInput, setTagInput] = useState('');
     const [errors, setErrors] = useState({});
@@ -106,7 +122,7 @@ export default function PocForm() {
                 techStack: poc.techStack || [],
                 demoLink: poc.demoLink || '',
                 repositoryLink: poc.repositoryLink || poc.repoLink || '',
-                status: poc.status || 'draft',
+                status: poc.status || '',
             });
         } catch {
             setError('Failed to load POC');
@@ -134,6 +150,9 @@ export default function PocForm() {
         if (currentStep === 1 && !form.challenges.trim()) {
             nextErrors.challenges = 'Challenges & requirements are required';
         }
+        if (!isViewer && currentStep === 2 && !form.status) {
+            nextErrors.status = 'Please select draft or published';
+        }
         setErrors(nextErrors);
         return Object.keys(nextErrors).length === 0;
     };
@@ -160,6 +179,14 @@ export default function PocForm() {
 
     const handleBack = () => setStep((prev) => Math.max(prev - 1, 0));
 
+    const handleStepTabClick = (targetStep) => {
+        if (targetStep <= step) {
+            setStep(targetStep);
+            return;
+        }
+        if (validateStep(step)) setStep(targetStep);
+    };
+
     const resetForAnother = () => {
         setForm({
             title: '',
@@ -170,7 +197,7 @@ export default function PocForm() {
             techStack: [],
             demoLink: '',
             repositoryLink: '',
-            status: 'draft',
+            status: '',
         });
         setTagInput('');
         setErrors({});
@@ -240,9 +267,17 @@ export default function PocForm() {
                 <p className="text-sm font-medium uppercase tracking-[0.2em] text-charcoal-500">Innovation Workspace</p>
                 <h1 className="mt-2 text-3xl font-bold text-charcoal-800">{isEdit ? 'Edit Idea' : 'Submit New Idea'}</h1>
                 <p className="mt-1 text-charcoal-500">Transform your concept into a tangible Proof of Concept.</p>
-                <div className="mt-5 flex flex-wrap gap-2">
+                <div className="mt-7 flex items-start justify-between relative">
+                    <div className="absolute left-0 right-0 top-7 h-0.5 bg-sand-200" />
                     {steps.map((stepName, idx) => (
-                        <StepChip key={stepName} label={stepName} active={idx === step} done={idx < step} />
+                        <StepChip
+                            key={stepName}
+                            label={stepName}
+                            active={idx === step}
+                            done={idx < step}
+                            onClick={() => handleStepTabClick(idx)}
+                            icon={idx === 0 ? <CoreIcon /> : idx === 1 ? <CodeIcon /> : <StatusIcon />}
+                        />
                     ))}
                 </div>
             </div>
@@ -375,15 +410,18 @@ export default function PocForm() {
                                     checked={form.status === 'draft'}
                                     onChange={(e) => setForm({ ...form, status: e.target.value })}
                                     description="Keep iterating internally before sharing broadly."
+                                    accent="draft"
                                 />
                                 <StatusOption
-                                    label="Published"
+                                    label="Publish"
                                     value="published"
                                     checked={form.status === 'published'}
                                     onChange={(e) => setForm({ ...form, status: e.target.value })}
                                     description="Share this idea with the full team now."
+                                    accent="published"
                                 />
                             </div>
+                            {errors.status && <p className="mt-3 text-xs text-coral-500">{errors.status}</p>}
                         </Card>
                     )}
 
@@ -411,5 +449,29 @@ export default function PocForm() {
                 </form>
             </Card>
         </div>
+    );
+}
+
+function CoreIcon() {
+    return (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l2.5 2.5M22 12a10 10 0 11-20 0 10 10 0 0120 0z" />
+        </svg>
+    );
+}
+
+function CodeIcon() {
+    return (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8 9l-3 3 3 3m8-6l3 3-3 3M13 7l-2 10" />
+        </svg>
+    );
+}
+
+function StatusIcon() {
+    return (
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2m0 14v2m7-9h2M3 12h2m11.95 6.95l1.414 1.414M4.636 4.636 6.05 6.05m11.314 0 1.414-1.414M4.636 19.364 6.05 17.95" />
+        </svg>
     );
 }

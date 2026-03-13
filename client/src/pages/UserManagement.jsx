@@ -36,6 +36,8 @@ export default function UserManagement() {
     const [formData, setFormData] = useState({ firstName: '', lastName: '', email: '', password: '', role: 'viewer' });
     const [formError, setFormError] = useState('');
     const [saving, setSaving] = useState(false);
+    const [deleteUser, setDeleteUser] = useState(null);
+    const [deleting, setDeleting] = useState(false);
 
     const fetchUsers = useCallback(async (page = 1) => {
         setLoading(true);
@@ -101,13 +103,17 @@ export default function UserManagement() {
         }
     };
 
-    const handleDelete = async (userId) => {
-        if (!window.confirm('Are you sure you want to delete this user?')) return;
+    const handleDelete = async () => {
+        if (!deleteUser) return;
+        setDeleting(true);
         try {
-            await userService.delete(userId);
+            await userService.delete(deleteUser._id);
+            setDeleteUser(null);
             fetchUsers(pagination.page);
         } catch {
             setError('Failed to delete user');
+        } finally {
+            setDeleting(false);
         }
     };
 
@@ -190,7 +196,7 @@ export default function UserManagement() {
                                                     Edit
                                                 </button>
                                                 <button
-                                                    onClick={() => handleDelete(u._id)}
+                                                    onClick={() => setDeleteUser(u)}
                                                     className="px-3 py-1.5 rounded-lg text-xs font-medium text-coral-600 hover:bg-coral-50 transition-colors"
                                                 >
                                                     Delete
@@ -262,6 +268,27 @@ export default function UserManagement() {
                         </Button>
                     </div>
                 </form>
+            </Modal>
+
+            <Modal
+                isOpen={Boolean(deleteUser)}
+                onClose={() => !deleting && setDeleteUser(null)}
+                title="Delete User"
+                size="sm"
+            >
+                <p className="text-sm text-charcoal-600">
+                    Are you sure you want to delete{' '}
+                    <span className="font-semibold text-charcoal-800">{deleteUser ? getFullName(deleteUser) : ''}</span>?
+                    This action cannot be undone.
+                </p>
+                <div className="mt-5 flex justify-end gap-2">
+                    <Button type="button" variant="ghost" size="sm" disabled={deleting} onClick={() => setDeleteUser(null)}>
+                        Cancel
+                    </Button>
+                    <Button type="button" variant="danger" size="sm" loading={deleting} onClick={handleDelete}>
+                        Delete
+                    </Button>
+                </div>
             </Modal>
         </div>
     );
