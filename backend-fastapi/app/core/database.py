@@ -12,7 +12,7 @@ class Database:
     async def connect(self) -> None:
         client_kwargs = {}
         if settings.mongodb_uri.startswith("mongodb+srv://"):
-            client_kwargs["tls"] = False
+            client_kwargs["tls"] = True
             #client_kwargs["tlsCAFile"] = certifi.where()
 
         self.client = AsyncIOMotorClient(settings.mongodb_uri, **client_kwargs)
