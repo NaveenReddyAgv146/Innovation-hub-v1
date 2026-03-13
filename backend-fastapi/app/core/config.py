@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     port: int = 8000
 
-    mongodb_uri: str = "mongodb://127.0.0.1:27017/poc_showcase"
+    mongodb_uri: str = "mongodb+srv://naveenreddyagivant_db_user:yV98OqyzC8QxmYcW@poc-cluster1.urn3zga.mongodb.net/"
     mongodb_db_name: str = "poc_showcase"
 
     client_url: str = "http://localhost:5173"
