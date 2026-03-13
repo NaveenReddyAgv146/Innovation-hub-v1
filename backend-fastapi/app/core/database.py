@@ -1,5 +1,6 @@
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
 from pymongo import ASCENDING, TEXT
+import certifi
 
 from app.core.config import settings
 
@@ -9,7 +10,12 @@ class Database:
     db: AsyncIOMotorDatabase | None = None
 
     async def connect(self) -> None:
-        self.client = AsyncIOMotorClient(settings.mongodb_uri)
+        client_kwargs = {}
+        if settings.mongodb_uri.startswith("mongodb+srv://"):
+            client_kwargs["tls"] = True
+            client_kwargs["tlsCAFile"] = certifi.where()
+
+        self.client = AsyncIOMotorClient(settings.mongodb_uri, **client_kwargs)
         self.db = self.client[settings.mongodb_db_name]
         await self.ensure_indexes()
 
