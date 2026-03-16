@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import useAuthStore from '../store/authStore';
 import { authService } from '../services/endpoints';
 import { COMPANY_LOGO_URL, COMPANY_NAME } from '../config/branding';
+import { getSubadminTrack } from '../utils/subadminTrack';
 
 const THEME_STORAGE_KEY = 'poc_theme';
 
@@ -12,6 +13,7 @@ export default function Layout({ children }) {
         localStorage.getItem(THEME_STORAGE_KEY) === 'dark' ? 'dark' : 'light'
     );
     const user = useAuthStore((s) => s.user);
+    const subadminTrack = getSubadminTrack(user?.email);
     const logoutStore = useAuthStore((s) => s.logout);
     const navigate = useNavigate();
     const location = useLocation();
@@ -31,16 +33,32 @@ export default function Layout({ children }) {
         { path: '/pocs', label: 'Innovations', icon: BoltIcon },
     ];
 
+    if (user?.role === 'viewer') {
+        navItems.push({ path: '/pocs?interested=true', label: 'Interested', icon: StarIcon });
+    }
+
     if (user?.role === 'admin' || user?.role === 'developer') {
         navItems.push({ path: '/pocs/new', label: 'New Innovation Brief', icon: PlusIcon });
     }
 
     if (user?.role === 'admin') {
         navItems.push({ path: '/admin/idea-reviews', label: 'Idea Reviews', icon: ReviewIcon });
+        navItems.push({ path: '/admin/user-interests', label: 'User Interests', icon: StarIcon });
         navItems.push({ path: '/users', label: 'Users', icon: UsersIcon });
     }
 
-    const isActive = (path) => location.pathname === path || (path !== '/dashboard' && location.pathname.startsWith(path) && path !== '/pocs/new');
+    if (subadminTrack) {
+        navItems.push({ path: '/dashboard/track', label: 'My Track Dashboard', icon: ScopeIcon });
+    }
+
+    const isInterestedRoute =
+        location.pathname === '/pocs' &&
+        new URLSearchParams(location.search).get('interested') === 'true';
+    const isActive = (path) => {
+        if (path === '/pocs?interested=true') return isInterestedRoute;
+        if (path === '/pocs') return (location.pathname === '/pocs' || location.pathname.startsWith('/pocs/')) && !isInterestedRoute;
+        return location.pathname === path || (path !== '/dashboard' && location.pathname.startsWith(path) && path !== '/pocs/new');
+    };
     const isDark = theme === 'dark';
 
     useEffect(() => {
@@ -197,6 +215,22 @@ function ReviewIcon({ active }) {
     return (
         <svg className={`w-5 h-5 ${active ? 'text-terracotta-500' : 'text-charcoal-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+    );
+}
+
+function StarIcon({ active }) {
+    return (
+        <svg className={`w-5 h-5 ${active ? 'text-terracotta-500' : 'text-charcoal-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.286 3.965a1 1 0 00.95.69h4.17c.969 0 1.372 1.24.588 1.81l-3.373 2.45a1 1 0 00-.364 1.118l1.289 3.965c.3.922-.755 1.688-1.54 1.118l-3.373-2.45a1 1 0 00-1.176 0l-3.373 2.45c-.784.57-1.838-.196-1.539-1.118l1.288-3.965a1 1 0 00-.363-1.118l-3.374-2.45c-.784-.57-.38-1.81.588-1.81h4.17a1 1 0 00.951-.69l1.285-3.965z" />
+        </svg>
+    );
+}
+
+function ScopeIcon({ active }) {
+    return (
+        <svg className={`w-5 h-5 ${active ? 'text-terracotta-500' : 'text-charcoal-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 12a8 8 0 1016 0 8 8 0 10-16 0m8-6v2m0 8v2m6-6h-2M8 12H6m6 0h.01" />
         </svg>
     );
 }

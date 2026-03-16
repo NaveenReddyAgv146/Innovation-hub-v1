@@ -35,6 +35,8 @@ export const pocService = {
     },
     delete: (id) => api.delete(`/pocs/${id}`),
     publish: (id) => api.post(`/pocs/${id}/publish`),
+    finish: (id) => api.post(`/pocs/${id}/finish`),
+    markDraft: (id) => api.post(`/pocs/${id}/mark-draft`),
     upvote: (id) => api.post(`/pocs/${id}/upvote`),
     removeUpvote: (id) => api.delete(`/pocs/${id}/upvote`),
     getVoters: (id) => api.get(`/pocs/${id}/voters`),
@@ -42,6 +44,7 @@ export const pocService = {
 
 export const userService = {
     getAll: (params) => api.get('/users', { params }),
+    getInterests: (params) => api.get('/users/interests', { params }),
     getById: (id) => api.get(`/users/${id}`),
     create: (data) => api.post('/users', data),
     update: (id, data) => api.put(`/users/${id}`, data),

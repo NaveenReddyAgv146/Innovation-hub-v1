@@ -33,7 +33,7 @@ export default function UserManagement() {
     const [error, setError] = useState('');
     const [modalOpen, setModalOpen] = useState(false);
     const [editUser, setEditUser] = useState(null);
-    const [formData, setFormData] = useState({ firstName: '', lastName: '', email: '', password: '', role: 'viewer' });
+    const [formData, setFormData] = useState({ firstName: '', lastName: '', email: '', password: '', role: 'viewer', employeeId: '' });
     const [formError, setFormError] = useState('');
     const [saving, setSaving] = useState(false);
     const [deleteUser, setDeleteUser] = useState(null);
@@ -62,7 +62,7 @@ export default function UserManagement() {
 
     const openCreateModal = () => {
         setEditUser(null);
-        setFormData({ firstName: '', lastName: '', email: '', password: '', role: 'viewer' });
+        setFormData({ firstName: '', lastName: '', email: '', password: '', role: 'viewer', employeeId: '' });
         setFormError('');
         setModalOpen(true);
     };
@@ -77,6 +77,7 @@ export default function UserManagement() {
             email: user.email,
             password: '',
             role: user.role,
+            employeeId: user.employeeId || '',
         });
         setFormError('');
         setModalOpen(true);
@@ -85,14 +86,22 @@ export default function UserManagement() {
     const handleSave = async (e) => {
         e.preventDefault();
         setFormError('');
+        if (formData.role === 'viewer' && !formData.employeeId.trim()) {
+            setFormError('Employee ID is required for viewer users');
+            return;
+        }
         setSaving(true);
         try {
+            const payload = {
+                ...formData,
+                employeeId: formData.employeeId.trim(),
+            };
+            if (!payload.employeeId) delete payload.employeeId;
             if (editUser) {
-                const payload = { ...formData };
                 if (!payload.password) delete payload.password;
                 await userService.update(editUser._id, payload);
             } else {
-                await userService.create(formData);
+                await userService.create(payload);
             }
             setModalOpen(false);
             fetchUsers(pagination.page);
@@ -259,6 +268,14 @@ export default function UserManagement() {
                             <option value="admin">Admin</option>
                         </select>
                     </div>
+                    {formData.role === 'viewer' && (
+                        <Input
+                            label="Employee ID"
+                            value={formData.employeeId}
+                            onChange={(e) => setFormData({ ...formData, employeeId: e.target.value })}
+                            required
+                        />
+                    )}
                     <div className="flex gap-3 pt-2">
                         <Button type="submit" loading={saving}>
                             {editUser ? 'Update' : 'Create'}

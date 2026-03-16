@@ -3,7 +3,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
-PocStatus = Literal["draft", "published"]
+PocStatus = Literal["draft", "published", "finished"]
 
 
 class PocUpdateBody(BaseModel):

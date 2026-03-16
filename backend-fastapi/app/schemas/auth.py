@@ -19,11 +19,19 @@ def compose_full_name(first_name: str, last_name: str) -> str:
     return f"{first_name} {last_name}".strip()
 
 
+def normalize_employee_id(value: str) -> str:
+    cleaned = value.strip()
+    if not cleaned:
+        raise ValueError("Employee ID is required")
+    return cleaned
+
+
 class RegisterRequest(BaseModel):
     firstName: str = Field(min_length=1, max_length=50)
     lastName: str = Field(min_length=1, max_length=50)
     email: EmailStr
     password: str = Field(min_length=6)
+    employeeId: str = Field(min_length=1, max_length=100)
 
     @field_validator("firstName")
     @classmethod
@@ -39,6 +47,11 @@ class RegisterRequest(BaseModel):
     @classmethod
     def email_domain_must_be_agivant(cls, value: EmailStr) -> str:
         return validate_agivant_email(value)
+
+    @field_validator("employeeId")
+    @classmethod
+    def validate_employee_id(cls, value: str) -> str:
+        return normalize_employee_id(value)
 
 
 class LoginRequest(BaseModel):

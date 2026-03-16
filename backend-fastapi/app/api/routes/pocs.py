@@ -18,6 +18,13 @@ BASE_DIR = Path(__file__).resolve().parents[3]
 UPLOAD_DIR = BASE_DIR / "uploads"
 ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 MAX_FILE_SIZE = 5 * 1024 * 1024
+VALID_TRACKS = {
+    "Solutions",
+    "Delivery",
+    "Learning",
+    "GTM/Sales",
+    "Organizational Building & Thought Leadership",
+}
 
 
 def parse_tech_stack(raw: str | None) -> list[str]:
@@ -116,6 +123,8 @@ async def get_pocs(
     limit: int = Query(default=10, ge=1, le=100),
     search: str = "",
     tag: str = "",
+    track: str = "",
+    interested: bool = Query(default=False),
     status_filter: str = Query(default="", alias="status"),
     author: str = "",
     current_user=Depends(get_current_user),
@@ -132,15 +141,26 @@ async def get_pocs(
         if tags:
             query_parts.append({"techStack": {"$in": tags}})
 
+    if track:
+        if track not in VALID_TRACKS:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid track")
+        query_parts.append({"track": track})
+
+    current_user_object_id = ObjectId(current_user["id"])
+    if interested:
+        query_parts.append({"votes": current_user_object_id})
+
     if current_user.get("role") == "viewer":
-        viewer_id = ObjectId(current_user["id"])
+        viewer_id = current_user_object_id
         if status_filter == "draft":
             query_parts.append({"status": "draft"})
             query_parts.append({"author": viewer_id})
         elif status_filter == "published":
-            query_parts.append({"status": "published"})
+            query_parts.append({"status": {"$in": ["published", "finished"]}})
+        elif status_filter == "finished":
+            query_parts.append({"status": "finished"})
         else:
-            query_parts.append({"$or": [{"status": "published"}, {"author": viewer_id}]})
+            query_parts.append({"$or": [{"status": {"$in": ["published", "finished"]}}, {"author": viewer_id}]})
     elif status_filter:
         query_parts.append({"status": status_filter})
 
@@ -194,7 +214,7 @@ async def get_poc_by_id(
     poc = await fetch_poc_or_404(db, poc_id)
     if (
         current_user.get("role") == "viewer"
-        and poc.get("status") != "published"
+        and poc.get("status") not in {"published", "finished"}
         and str(poc.get("author")) != current_user["id"]
     ):
         raise HTTPException(
@@ -218,6 +238,8 @@ async def create_poc(
     title: str = Form(...),
     description: str = Form(default=""),
     customer: str = Form(...),
+    track: str = Form(...),
+    pointOfContact: str = Form(default=""),
     customerClassification: str = Form(default="Existing"),
     challenges: str = Form(default=""),
     requestorName: str = Form(default=""),
@@ -235,6 +257,8 @@ async def create_poc(
 
     if status_value not in {"draft", "published"}:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid status")
+    if track not in VALID_TRACKS:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid track")
 
     thumbnail_path = await save_thumbnail(thumbnail)
     now = datetime.now(timezone.utc)
@@ -253,11 +277,19 @@ async def create_poc(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Requestor name cannot exceed 100 characters")
 
     cleaned_repo_link = repositoryLink.strip() or repoLink.strip()
+    cleaned_point_of_contact = pointOfContact.strip()
+    if len(cleaned_point_of_contact) > 100:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Point of contact cannot exceed 100 characters",
+        )
 
     doc = {
         "title": cleaned_title,
         "description": cleaned_description,
         "customer": cleaned_customer,
+        "track": track,
+        "pointOfContact": cleaned_point_of_contact,
         "customerClassification": customerClassification,
         "challenges": cleaned_challenges,
         "requestorName": cleaned_requestor,
@@ -291,6 +323,8 @@ async def update_poc(
     title: str | None = Form(default=None),
     description: str | None = Form(default=None),
     customer: str | None = Form(default=None),
+    track: str | None = Form(default=None),
+    pointOfContact: str | None = Form(default=None),
     customerClassification: str | None = Form(default=None),
     challenges: str | None = Form(default=None),
     requestorName: str | None = Form(default=None),
@@ -313,6 +347,18 @@ async def update_poc(
         updates["description"] = clean_optional_text("Description", description, 5000)
     if customer is not None:
         updates["customer"] = clean_optional_text("Customer", customer, 300)
+    if track is not None:
+        if track not in VALID_TRACKS:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid track")
+        updates["track"] = track
+    if pointOfContact is not None:
+        cleaned_poc = pointOfContact.strip()
+        if len(cleaned_poc) > 100:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Point of contact cannot exceed 100 characters",
+            )
+        updates["pointOfContact"] = cleaned_poc
     if customerClassification is not None:
         if customerClassification not in {"Existing", "New"}:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid customer classification")
@@ -338,8 +384,19 @@ async def update_poc(
         updates["repositoryLink"] = repositoryLink.strip()
         updates["repoLink"] = repositoryLink.strip()
     if status_value is not None:
-        if status_value not in {"draft", "published"}:
+        if status_value not in {"draft", "published", "finished"}:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid status")
+        if status_value == "finished":
+            if current_user.get("role") != "admin":
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Only admins can mark an idea as finished",
+                )
+            if poc.get("status") != "published":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Only published ideas can be marked as finished",
+                )
         updates["status"] = status_value
 
     if thumbnail is not None:
@@ -398,6 +455,68 @@ async def publish_poc(
     enrich_vote_info(serialized, current_user["id"])
 
     return {"message": "POC published", "poc": serialized}
+
+
+@router.post("/{poc_id}/finish")
+async def finish_poc(
+    poc_id: str,
+    current_user=Depends(require_roles("admin")),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    poc = await fetch_poc_or_404(db, poc_id)
+    if poc.get("status") != "published":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only published ideas can be marked as finished",
+        )
+
+    await db.pocs.update_one(
+        {"_id": ObjectId(poc_id)},
+        {"$set": {"status": "finished", "updatedAt": datetime.now(timezone.utc)}},
+    )
+
+    updated = await db.pocs.find_one({"_id": ObjectId(poc_id)})
+    serialized = serialize_doc(updated)
+
+    author_id = serialized.get("author")
+    if author_id and ObjectId.is_valid(author_id):
+        user = await db.users.find_one({"_id": ObjectId(author_id)}, {"name": 1, "email": 1})
+        if user:
+            serialized["author"] = serialize_doc(user)
+    enrich_vote_info(serialized, current_user["id"])
+
+    return {"message": "POC marked as finished", "poc": serialized}
+
+
+@router.post("/{poc_id}/mark-draft")
+async def mark_poc_as_draft(
+    poc_id: str,
+    current_user=Depends(require_roles("admin")),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    poc = await fetch_poc_or_404(db, poc_id)
+    if poc.get("status") != "published":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only published ideas can be moved to draft",
+        )
+
+    await db.pocs.update_one(
+        {"_id": ObjectId(poc_id)},
+        {"$set": {"status": "draft", "updatedAt": datetime.now(timezone.utc)}},
+    )
+
+    updated = await db.pocs.find_one({"_id": ObjectId(poc_id)})
+    serialized = serialize_doc(updated)
+
+    author_id = serialized.get("author")
+    if author_id and ObjectId.is_valid(author_id):
+        user = await db.users.find_one({"_id": ObjectId(author_id)}, {"name": 1, "email": 1})
+        if user:
+            serialized["author"] = serialize_doc(user)
+    enrich_vote_info(serialized, current_user["id"])
+
+    return {"message": "POC moved to draft", "poc": serialized}
 
 
 @router.post("/{poc_id}/upvote")

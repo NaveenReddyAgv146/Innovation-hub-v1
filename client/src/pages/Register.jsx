@@ -18,7 +18,7 @@ const getApiErrorMessage = (err, fallback) => {
 };
 
 export default function Register() {
-    const [form, setForm] = useState({ firstName: '', lastName: '', email: '', password: '' });
+    const [form, setForm] = useState({ firstName: '', lastName: '', email: '', employeeId: '', password: '' });
     const [errors, setErrors] = useState({});
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
@@ -29,6 +29,7 @@ export default function Register() {
         if (!form.firstName.trim()) errs.firstName = 'First name is required';
         if (!form.lastName.trim()) errs.lastName = 'Last name is required';
         if (!form.email.trim()) errs.email = 'Email is required';
+        if (!form.employeeId.trim()) errs.employeeId = 'Employee ID is required';
         if (form.password.length < 6) errs.password = 'At least 6 characters';
         setErrors(errs);
         return Object.keys(errs).length === 0;
@@ -40,7 +41,10 @@ export default function Register() {
         setError('');
         setLoading(true);
         try {
-            await authService.register(form);
+            await authService.register({
+                ...form,
+                employeeId: form.employeeId.trim(),
+            });
             navigate('/login', { state: { registered: true } });
         } catch (err) {
             setError(getApiErrorMessage(err, 'Registration failed'));
@@ -89,6 +93,14 @@ export default function Register() {
                             value={form.email}
                             onChange={(e) => setForm({ ...form, email: e.target.value })}
                             error={errors.email}
+                            required
+                        />
+                        <Input
+                            label="Employee ID"
+                            placeholder="EMP-001"
+                            value={form.employeeId}
+                            onChange={(e) => setForm({ ...form, employeeId: e.target.value })}
+                            error={errors.employeeId}
                             required
                         />
                         <Input

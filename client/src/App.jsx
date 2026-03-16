@@ -9,11 +9,13 @@ import Layout from './components/Layout';
 const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
+const TrackDashboard = lazy(() => import('./pages/TrackDashboard'));
 const PocList = lazy(() => import('./pages/PocList'));
 const PocDetail = lazy(() => import('./pages/PocDetail'));
 const PocForm = lazy(() => import('./pages/PocForm'));
 const UserManagement = lazy(() => import('./pages/UserManagement'));
 const IdeaReviews = lazy(() => import('./pages/IdeaReviews'));
+const UserInterests = lazy(() => import('./pages/UserInterests'));
 const THEME_STORAGE_KEY = 'poc_theme';
 
 function PageLoader() {
@@ -54,6 +56,15 @@ export default function App() {
             element={
               <AppLayout>
                 <Dashboard />
+              </AppLayout>
+            }
+          />
+
+          <Route
+            path="/dashboard/track"
+            element={
+              <AppLayout>
+                <TrackDashboard />
               </AppLayout>
             }
           />
@@ -115,6 +126,17 @@ export default function App() {
               <AppLayout>
                 <RoleRoute roles={['admin']}>
                   <IdeaReviews />
+                </RoleRoute>
+              </AppLayout>
+            }
+          />
+
+          <Route
+            path="/admin/user-interests"
+            element={
+              <AppLayout>
+                <RoleRoute roles={['admin']}>
+                  <UserInterests />
                 </RoleRoute>
               </AppLayout>
             }

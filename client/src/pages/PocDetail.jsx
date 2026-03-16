@@ -19,6 +19,8 @@ export default function PocDetail() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [deleting, setDeleting] = useState(false);
+    const [finishing, setFinishing] = useState(false);
+    const [markingDraft, setMarkingDraft] = useState(false);
     const [deleteModalOpen, setDeleteModalOpen] = useState(false);
     const [voting, setVoting] = useState(false);
     const [voters, setVoters] = useState([]);
@@ -45,6 +47,8 @@ export default function PocDetail() {
     const authorId = poc?.author?._id || poc?.author?.id || poc?.author;
     const isOwner = authorId === user?._id || authorId === user?.id;
     const canEdit = user?.role === 'admin' || (user?.role === 'developer' && isOwner);
+    const canFinish = user?.role === 'admin' && poc?.status === 'published';
+    const canMoveToDraft = user?.role === 'admin' && poc?.status === 'published';
     const canViewVoters = user?.role === 'admin' || isOwner;
     const canVote = poc?.status === 'published' && user?.role !== 'admin' && !isOwner;
     const authorName = getAuthorName(poc?.author);
@@ -110,6 +114,32 @@ export default function PocDetail() {
         }
     };
 
+    const handleMarkFinished = async () => {
+        if (!poc?._id || !canFinish) return;
+        setFinishing(true);
+        try {
+            const { data } = await pocService.finish(poc._id);
+            setPoc((prev) => ({ ...prev, ...(data.poc || {}) }));
+        } catch {
+            setError('Failed to mark innovation as finished');
+        } finally {
+            setFinishing(false);
+        }
+    };
+
+    const handleMarkDraft = async () => {
+        if (!poc?._id || !canMoveToDraft) return;
+        setMarkingDraft(true);
+        try {
+            const { data } = await pocService.markDraft(poc._id);
+            setPoc((prev) => ({ ...prev, ...(data.poc || {}) }));
+        } catch {
+            setError('Failed to move innovation to draft');
+        } finally {
+            setMarkingDraft(false);
+        }
+    };
+
     if (loading) return <Spinner size="lg" className="mt-24" />;
     if (error) return <ErrorState message={error} onRetry={fetchPoc} />;
     if (!poc) return null;
@@ -135,7 +165,7 @@ export default function PocDetail() {
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                 <div className="space-y-2">
                     <div className="flex items-center gap-2">
-                        <Badge color={poc.status === 'published' ? 'green' : 'amber'}>
+                        <Badge color={poc.status === 'published' ? 'green' : poc.status === 'finished' ? 'green' : 'amber'}>
                             {poc.status}
                         </Badge>
                         <span className="text-sm text-charcoal-500">
@@ -157,6 +187,16 @@ export default function PocDetail() {
 
                 {canEdit && (
                     <div className="flex gap-2">
+                        {canFinish && (
+                            <Button variant="secondary" size="sm" loading={finishing} onClick={handleMarkFinished}>
+                                Mark as Finished
+                            </Button>
+                        )}
+                        {canMoveToDraft && (
+                            <Button variant="outline" size="sm" loading={markingDraft} onClick={handleMarkDraft}>
+                                Mark as Draft
+                            </Button>
+                        )}
                         <Link to={`/pocs/${poc._id}/edit`}>
                             <Button variant="outline" size="sm">Edit</Button>
                         </Link>
@@ -214,6 +254,14 @@ export default function PocDetail() {
                     <div className="space-y-1">
                         <p className="text-xs uppercase tracking-wide text-charcoal-400">Status</p>
                         <p className="text-sm text-charcoal-700">{poc.status || '-'}</p>
+                    </div>
+                    <div className="space-y-1">
+                        <p className="text-xs uppercase tracking-wide text-charcoal-400">Track</p>
+                        <p className="text-sm text-charcoal-700">{poc.track || '-'}</p>
+                    </div>
+                    <div className="space-y-1">
+                        <p className="text-xs uppercase tracking-wide text-charcoal-400">Point of Contact</p>
+                        <p className="text-sm text-charcoal-700">{poc.pointOfContact || '-'}</p>
                     </div>
                 </div>
 
