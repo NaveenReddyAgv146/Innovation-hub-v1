@@ -1,8 +1,8 @@
 from typing import Literal
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
-from app.schemas.auth import normalize_name_part, validate_agivant_email
+from app.schemas.auth import normalize_employee_id, normalize_name_part, validate_agivant_email
 
 
 Role = Literal["admin", "developer", "viewer"]
@@ -14,6 +14,7 @@ class CreateUserRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=6)
     role: Role = "viewer"
+    employeeId: str | None = Field(default=None, max_length=100)
 
     @field_validator("firstName")
     @classmethod
@@ -30,6 +31,19 @@ class CreateUserRequest(BaseModel):
     def email_domain_must_be_agivant(cls, value: EmailStr) -> str:
         return validate_agivant_email(value)
 
+    @field_validator("employeeId")
+    @classmethod
+    def validate_employee_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return normalize_employee_id(value)
+
+    @model_validator(mode="after")
+    def validate_employee_id_for_viewer(self):
+        if self.role == "viewer" and not self.employeeId:
+            raise ValueError("Employee ID is required for viewer users")
+        return self
+
 
 class UpdateUserRequest(BaseModel):
     firstName: str | None = Field(default=None, min_length=1, max_length=50)
@@ -37,6 +51,7 @@ class UpdateUserRequest(BaseModel):
     email: EmailStr | None = None
     password: str | None = Field(default=None, min_length=6)
     role: Role | None = None
+    employeeId: str | None = Field(default=None, max_length=100)
 
     @field_validator("firstName")
     @classmethod
@@ -58,3 +73,10 @@ class UpdateUserRequest(BaseModel):
         if value is None:
             return None
         return validate_agivant_email(value)
+
+    @field_validator("employeeId")
+    @classmethod
+    def validate_employee_id(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return normalize_employee_id(value)

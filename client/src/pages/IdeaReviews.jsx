@@ -8,10 +8,21 @@ import Spinner from '../components/ui/Spinner';
 import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
 
+const getTitleWithTrack = (idea = {}) => (idea.track ? `${idea.title} · ${idea.track}` : idea.title);
+const TRACK_OPTIONS = [
+    { value: 'all', label: 'All Tracks' },
+    { value: 'Solutions', label: 'Solutions' },
+    { value: 'Delivery', label: 'Delivery' },
+    { value: 'Learning', label: 'Learning' },
+    { value: 'GTM/Sales', label: 'GTM/Sales' },
+    { value: 'Organizational Building & Thought Leadership', label: 'Thought Leadership' },
+];
+
 export default function IdeaReviews() {
     const [ideas, setIdeas] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [trackFilter, setTrackFilter] = useState('all');
     const [publishingId, setPublishingId] = useState('');
     const [publishToast, setPublishToast] = useState({ visible: false, title: '' });
     const publishToastTimerRef = useRef(null);
@@ -20,14 +31,16 @@ export default function IdeaReviews() {
         setLoading(true);
         setError('');
         try {
-            const { data } = await pocService.getAll({ page: 1, limit: 50, status: 'draft' });
+            const params = { page: 1, limit: 50, status: 'draft' };
+            if (trackFilter !== 'all') params.track = trackFilter;
+            const { data } = await pocService.getAll(params);
             setIdeas(data.pocs || []);
         } catch {
             setError('Failed to load idea review queue');
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [trackFilter]);
 
     useEffect(() => {
         fetchIdeas();
@@ -89,6 +102,24 @@ export default function IdeaReviews() {
                 </Button>
             </div>
 
+            <Card hover={false} className="p-4">
+                <div className="flex flex-wrap justify-center gap-2">
+                    {TRACK_OPTIONS.map((track) => (
+                        <button
+                            key={track.value}
+                            onClick={() => setTrackFilter(track.value)}
+                            className={`px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200
+                  ${trackFilter === track.value
+                                    ? 'bg-terracotta-500 text-white shadow-sm'
+                                    : 'bg-sand-100 text-charcoal-600 hover:bg-sand-200'
+                                }`}
+                        >
+                            {track.label}
+                        </button>
+                    ))}
+                </div>
+            </Card>
+
             {loading ? (
                 <Spinner size="lg" className="mt-12" />
             ) : error ? (
@@ -116,7 +147,7 @@ export default function IdeaReviews() {
                                             Submitted {new Date(idea.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                                         </span>
                                     </div>
-                                    <h2 className="text-lg font-semibold text-charcoal-800">{idea.title}</h2>
+                                    <h2 className="text-lg font-semibold text-charcoal-800">{getTitleWithTrack(idea)}</h2>
                                     <p className="text-sm text-charcoal-600 whitespace-pre-line line-clamp-3">
                                         {idea.description || idea.challenges || 'No summary provided yet.'}
                                     </p>

@@ -13,19 +13,34 @@ import Pagination from '../components/ui/Pagination';
 import { getThumbnailGradient } from '../utils/thumbnailGradient';
 import { getPocIconPaths } from '../utils/pocIcon';
 
-const STATUS_OPTIONS = ['all', 'published', 'draft'];
+const STATUS_OPTIONS = ['all', 'published', 'draft', 'finished'];
+const TRACK_OPTIONS = [
+    { value: 'all', label: 'All Tracks' },
+    { value: 'Solutions', label: 'Solutions' },
+    { value: 'Delivery', label: 'Delivery' },
+    { value: 'Learning', label: 'Learning' },
+    { value: 'GTM/Sales', label: 'GTM/Sales' },
+    { value: 'Organizational Building & Thought Leadership', label: 'Thought Leadership' },
+];
 const getAuthorName = (author = {}) =>
     [author.firstName, author.lastName].filter(Boolean).join(' ').trim() || author.name || 'Unknown';
+const getTitleWithTrack = (poc = {}) => (poc.track ? `${poc.title} · ${poc.track}` : poc.title);
 
 export default function PocList() {
     const user = useAuthStore((s) => s.user);
+    const canUseStatusFilters = user?.role === 'admin' || user?.role === 'developer';
     const [searchParams, setSearchParams] = useSearchParams();
     const statusFromUrl = (searchParams.get('status') || 'all').toLowerCase();
-    const initialStatus = STATUS_OPTIONS.includes(statusFromUrl) ? statusFromUrl : 'all';
+    const interestedFromUrl = searchParams.get('interested') === 'true';
+    const initialStatus = canUseStatusFilters && STATUS_OPTIONS.includes(statusFromUrl) ? statusFromUrl : 'published';
+    const trackFromUrl = searchParams.get('track') || 'all';
+    const initialTrack = TRACK_OPTIONS.some((t) => t.value === trackFromUrl) ? trackFromUrl : 'all';
     const [pocs, setPocs] = useState([]);
     const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
     const [search, setSearch] = useState('');
     const [statusFilter, setStatusFilter] = useState(initialStatus);
+    const [trackFilter, setTrackFilter] = useState(initialTrack);
+    const [interestedOnly, setInterestedOnly] = useState(interestedFromUrl);
     const [tagFilter, setTagFilter] = useState('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -37,7 +52,13 @@ export default function PocList() {
         try {
             const params = { page, limit: 9 };
             if (search) params.search = search;
-            if (statusFilter !== 'all') params.status = statusFilter;
+            if (canUseStatusFilters) {
+                if (statusFilter !== 'all') params.status = statusFilter;
+            } else {
+                params.status = 'published';
+            }
+            if (trackFilter !== 'all') params.track = trackFilter;
+            if (interestedOnly) params.interested = true;
             if (tagFilter) params.tag = tagFilter;
 
             const { data } = await pocService.getAll(params);
@@ -48,7 +69,7 @@ export default function PocList() {
         } finally {
             setLoading(false);
         }
-    }, [search, statusFilter, tagFilter]);
+    }, [search, statusFilter, trackFilter, interestedOnly, tagFilter, canUseStatusFilters]);
 
     useEffect(() => {
         const debounce = setTimeout(() => fetchPocs(1), 300);
@@ -56,10 +77,26 @@ export default function PocList() {
     }, [fetchPocs]);
 
     useEffect(() => {
-        if (statusFilter !== initialStatus) {
-            setStatusFilter(initialStatus);
+        if (canUseStatusFilters) {
+            if (statusFilter !== initialStatus) {
+                setStatusFilter(initialStatus);
+            }
+        } else if (statusFilter !== 'published') {
+            setStatusFilter('published');
         }
-    }, [initialStatus, statusFilter]);
+    }, [initialStatus, statusFilter, canUseStatusFilters]);
+
+    useEffect(() => {
+        if (trackFilter !== initialTrack) {
+            setTrackFilter(initialTrack);
+        }
+    }, [initialTrack, trackFilter]);
+
+    useEffect(() => {
+        if (interestedOnly !== interestedFromUrl) {
+            setInterestedOnly(interestedFromUrl);
+        }
+    }, [interestedFromUrl, interestedOnly]);
 
     const canVoteOnPoc = (poc) => {
         if (user?.role === 'admin') return false;
@@ -113,20 +150,92 @@ export default function PocList() {
 
             {/* Filters */}
             <Card hover={false} className="p-4">
-                <div className="flex flex-col sm:flex-row gap-3">
-                    <div className="flex-1">
-                        <Input
-                            placeholder="Search by title or description..."
-                            value={search}
-                            onChange={(e) => setSearch(e.target.value)}
-                            icon={
-                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                                </svg>
-                            }
-                        />
+                <div className="space-y-3">
+                    <Input
+                        placeholder="Search by title or description..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        icon={
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                        }
+                    />
+                    {user?.role === 'viewer' && (
+                        <div className="flex justify-center gap-2">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setInterestedOnly(false);
+                                    setSearchParams((prev) => {
+                                        const next = new URLSearchParams(prev);
+                                        next.delete('interested');
+                                        next.set('status', 'published');
+                                        if (trackFilter !== 'all') next.set('track', trackFilter);
+                                        else next.delete('track');
+                                        return next;
+                                    });
+                                }}
+                                className={`px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200
+                  ${!interestedOnly
+                                        ? 'bg-terracotta-500 text-white shadow-sm'
+                                        : 'bg-sand-100 text-charcoal-600 hover:bg-sand-200'
+                                    }`}
+                            >
+                                All Visible
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setInterestedOnly(true);
+                                    setSearchParams((prev) => {
+                                        const next = new URLSearchParams(prev);
+                                        next.set('interested', 'true');
+                                        next.set('status', 'published');
+                                        if (trackFilter !== 'all') next.set('track', trackFilter);
+                                        else next.delete('track');
+                                        return next;
+                                    });
+                                }}
+                                className={`px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200
+                  ${interestedOnly
+                                        ? 'bg-terracotta-500 text-white shadow-sm'
+                                        : 'bg-sand-100 text-charcoal-600 hover:bg-sand-200'
+                                    }`}
+                            >
+                                My Interested
+                            </button>
+                        </div>
+                    )}
+
+                    <div className="flex flex-wrap justify-center gap-2">
+                        {TRACK_OPTIONS.map((track) => (
+                            <button
+                                key={track.value}
+                                onClick={() => {
+                                    setTrackFilter(track.value);
+                                    setSearchParams((prev) => {
+                                        const next = new URLSearchParams(prev);
+                                        next.set('status', canUseStatusFilters ? statusFilter : 'published');
+                                        if (interestedOnly) next.set('interested', 'true');
+                                        else next.delete('interested');
+                                        if (track.value !== 'all') next.set('track', track.value);
+                                        else next.delete('track');
+                                        return next;
+                                    });
+                                }}
+                                className={`px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200
+                  ${trackFilter === track.value
+                                        ? 'bg-terracotta-500 text-white shadow-sm'
+                                        : 'bg-sand-100 text-charcoal-600 hover:bg-sand-200'
+                                    }`}
+                            >
+                                {track.label}
+                            </button>
+                        ))}
                     </div>
-                    <div className="flex gap-2 items-end">
+                    {canUseStatusFilters && (
+                    <div className="flex justify-center gap-2">
                         {STATUS_OPTIONS.map((s) => (
                             <button
                                 key={s}
@@ -135,6 +244,10 @@ export default function PocList() {
                                     setSearchParams((prev) => {
                                         const next = new URLSearchParams(prev);
                                         next.set('status', s);
+                                        if (interestedOnly) next.set('interested', 'true');
+                                        else next.delete('interested');
+                                        if (trackFilter !== 'all') next.set('track', trackFilter);
+                                        else next.delete('track');
                                         return next;
                                     });
                                 }}
@@ -148,12 +261,8 @@ export default function PocList() {
                             </button>
                         ))}
                     </div>
-                    <Input
-                        placeholder="Filter by tag"
-                        value={tagFilter}
-                        onChange={(e) => setTagFilter(e.target.value)}
-                        className="sm:w-44"
-                    />
+                )}
+                    
                 </div>
             </Card>
 
@@ -195,14 +304,14 @@ export default function PocList() {
                                         </div>
                                     )}
                                     <div className="absolute top-3 right-3">
-                                        <Badge color={poc.status === 'published' ? 'green' : 'amber'}>
+                                        <Badge color={poc.status === 'published' ? 'green' : poc.status === 'finished' ? 'green' : 'amber'}>
                                             {poc.status}
                                         </Badge>
                                     </div>
                                 </div>
                                 {/* Content */}
                                 <div className="p-4 flex-1 flex flex-col">
-                                    <h3 className="font-semibold text-charcoal-800 mb-1 line-clamp-1">{poc.title}</h3>
+                                    <h3 className="font-semibold text-charcoal-800 mb-1 line-clamp-1">{getTitleWithTrack(poc)}</h3>
                                     <p className="text-sm text-charcoal-500 line-clamp-2 mb-3 flex-1">{poc.description}</p>
                                     <div className="flex flex-wrap gap-1.5">
                                         {poc.techStack?.slice(0, 4).map((t) => (

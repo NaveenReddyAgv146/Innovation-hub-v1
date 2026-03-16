@@ -7,6 +7,14 @@ import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import Spinner from '../components/ui/Spinner';
 
+const TRACK_OPTIONS = [
+    'Solutions',
+    'Delivery',
+    'Learning',
+    'GTM/Sales',
+    'Organizational Building & Thought Leadership',
+];
+
 const getApiErrorMessage = (err, fallback) => {
     const data = err?.response?.data;
     if (!data) return fallback;
@@ -76,6 +84,28 @@ function StatusOption({ label, value, checked, onChange, description, accent = '
     );
 }
 
+function TrackOption({ label, checked, onChange }) {
+    return (
+        <label
+            className={`flex cursor-pointer items-start gap-3 rounded-2xl border px-4 py-3 transition-all duration-200 ${
+                checked
+                    ? 'border-terracotta-300 bg-terracotta-50 text-terracotta-700 ring-2 ring-terracotta-100'
+                    : 'border-sand-200 bg-white text-charcoal-600 hover:border-sand-300'
+            }`}
+        >
+            <input type="radio" name="track" value={label} checked={checked} onChange={onChange} className="sr-only" />
+            <span
+                className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                    checked ? 'border-terracotta-300 bg-terracotta-500' : 'border-sand-300 bg-white'
+                }`}
+            >
+                <span className={`h-1.5 w-1.5 rounded-full ${checked ? 'bg-white' : 'bg-transparent'}`} />
+            </span>
+            <span className="text-sm font-medium">{label}</span>
+        </label>
+    );
+}
+
 export default function PocForm() {
     const { id } = useParams();
     const isEdit = Boolean(id);
@@ -87,6 +117,8 @@ export default function PocForm() {
     const [form, setForm] = useState({
         title: '',
         customer: '',
+        track: '',
+        pointOfContact: '',
         customerClassification: 'Existing',
         challenges: '',
         requestorName: '',
@@ -116,6 +148,8 @@ export default function PocForm() {
             setForm({
                 title: poc.title || '',
                 customer: poc.customer || '',
+                track: poc.track || '',
+                pointOfContact: poc.pointOfContact || '',
                 customerClassification: poc.customerClassification || 'Existing',
                 challenges: poc.challenges || '',
                 requestorName: poc.requestorName || '',
@@ -146,6 +180,7 @@ export default function PocForm() {
         if (currentStep === 0) {
             if (!form.title.trim()) nextErrors.title = 'Project title is required';
             if (!form.customer.trim()) nextErrors.customer = 'Target audience/customer is required';
+            if (!form.track) nextErrors.track = 'Please select one innovation track';
         }
         if (currentStep === 1 && !form.challenges.trim()) {
             nextErrors.challenges = 'Challenges & requirements are required';
@@ -191,6 +226,8 @@ export default function PocForm() {
         setForm({
             title: '',
             customer: '',
+            track: '',
+            pointOfContact: '',
             customerClassification: 'Existing',
             challenges: '',
             requestorName: user?.name || '',
@@ -216,6 +253,8 @@ export default function PocForm() {
             const payload = {
                 title: form.title.trim(),
                 customer: form.customer.trim(),
+                track: form.track,
+                pointOfContact: form.pointOfContact.trim(),
                 customerClassification: form.customerClassification,
                 challenges: form.challenges.trim(),
                 description: form.challenges.trim(),
@@ -314,6 +353,29 @@ export default function PocForm() {
                                     onChange={(e) => setForm({ ...form, customer: e.target.value })}
                                     error={errors.customer}
                                     required
+                                    className="md:col-span-2"
+                                />
+
+                                <div className="space-y-2 md:col-span-2">
+                                    <label className="block text-sm font-medium text-charcoal-700">Innovation Track</label>
+                                    <div className="grid gap-3 md:grid-cols-2">
+                                        {TRACK_OPTIONS.map((track) => (
+                                            <TrackOption
+                                                key={track}
+                                                label={track}
+                                                checked={form.track === track}
+                                                onChange={(e) => setForm({ ...form, track: e.target.value })}
+                                            />
+                                        ))}
+                                    </div>
+                                    {errors.track && <p className="text-xs text-coral-500">{errors.track}</p>}
+                                </div>
+
+                                <Input
+                                    label="Point of Contact (Optional)"
+                                    placeholder="Name or email"
+                                    value={form.pointOfContact}
+                                    onChange={(e) => setForm({ ...form, pointOfContact: e.target.value })}
                                     className="md:col-span-2"
                                 />
                             </div>

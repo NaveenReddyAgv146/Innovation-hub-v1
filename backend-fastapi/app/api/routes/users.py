@@ -47,6 +47,69 @@ async def get_users(
     }
 
 
+@router.get("/interests")
+async def get_user_interests(
+    search: str = "",
+    _admin=Depends(require_roles("admin")),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    pipeline: list[dict] = [
+        {"$match": {"status": {"$in": ["published", "finished"]}, "votes.0": {"$exists": True}}},
+        {"$unwind": "$votes"},
+        {
+            "$group": {
+                "_id": "$votes",
+                "interestedCount": {"$sum": 1},
+                "projects": {
+                    "$push": {
+                        "_id": {"$toString": "$_id"},
+                        "title": "$title",
+                        "track": "$track",
+                        "status": "$status",
+                        "updatedAt": "$updatedAt",
+                    }
+                },
+            }
+        },
+        {
+            "$lookup": {
+                "from": "users",
+                "localField": "_id",
+                "foreignField": "_id",
+                "as": "user",
+            }
+        },
+        {"$unwind": "$user"},
+    ]
+
+    if search:
+        regex = {"$regex": search, "$options": "i"}
+        pipeline.append({"$match": {"$or": [{"user.name": regex}, {"user.email": regex}]}})
+
+    pipeline.extend(
+        [
+            {
+                "$project": {
+                    "_id": 0,
+                    "user": {
+                        "_id": {"$toString": "$user._id"},
+                        "name": "$user.name",
+                        "email": "$user.email",
+                        "role": "$user.role",
+                        "employeeId": {"$ifNull": ["$user.employeeId", ""]},
+                    },
+                    "interestedCount": 1,
+                    "projects": 1,
+                }
+            },
+            {"$sort": {"interestedCount": -1, "user.name": 1}},
+        ]
+    )
+
+    rows = await db.pocs.aggregate(pipeline).to_list(length=None)
+    return {"users": rows}
+
+
 @router.get("/{user_id}")
 async def get_user_by_id(
     user_id: str,
@@ -81,6 +144,7 @@ async def create_user(
         "lastName": last_name,
         "name": compose_full_name(first_name, last_name),
         "email": payload.email.lower(),
+        "employeeId": payload.employeeId,
         "password": hash_password(payload.password),
         "role": payload.role,
         "refreshToken": None,
@@ -132,6 +196,14 @@ async def update_user(
 
     if "password" in updates:
         updates["password"] = hash_password(updates["password"])
+
+    target_role = updates.get("role", existing_user.get("role"))
+    target_employee_id = updates.get("employeeId", existing_user.get("employeeId"))
+    if target_role == "viewer" and not target_employee_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Employee ID is required for viewer users",
+        )
 
     if updates:
         updates["updatedAt"] = datetime.now(timezone.utc)

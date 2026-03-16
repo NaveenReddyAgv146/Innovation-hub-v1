@@ -122,6 +122,12 @@ textarea {
   transition: all 0.2s ease-in-out;
 }
 
+/* Show hand cursor on clickable controls */
+button,
+[role="button"] {
+  cursor: pointer;
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 8px;

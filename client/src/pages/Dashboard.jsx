@@ -8,18 +8,40 @@ import Spinner from '../components/ui/Spinner';
 import ErrorState from '../components/ui/ErrorState';
 import Button from '../components/ui/Button';
 import { getThumbnailGradient } from '../utils/thumbnailGradient';
+import solutionsIcon from '../assests/solutions.png';
+import deliveryIcon from '../assests/delivery.png';
+import learningIcon from '../assests/learning.png';
+import gtmSalesIcon from '../assests/increase.png';
+import leadershipIcon from '../assests/leadership.png';
+
+const getTitleWithTrack = (item = {}) => (item.track ? `${item.title} · ${item.track}` : item.title);
+const TRACKS = [
+    { key: 'Solutions', label: 'Solutions', icon: solutionsIcon, ringColor: '#1d4ed8', barClass: 'bg-blue-700' },
+    { key: 'Delivery', label: 'Delivery', icon: deliveryIcon, ringColor: '#dc2626', barClass: 'bg-red-600' },
+    { key: 'Learning', label: 'Learning', icon: learningIcon, ringColor: '#7c3aed', barClass: 'bg-violet-600' },
+    { key: 'GTM/Sales', label: 'GTM/Sales', icon: gtmSalesIcon, ringColor: '#ea580c', barClass: 'bg-orange-600' },
+    { key: 'Organizational Building & Thought Leadership', label: 'Thought Leadership', icon: leadershipIcon, ringColor: '#0f766e', barClass: 'bg-teal-700' },
+];
+const buildEmptyTrackStats = () =>
+    TRACKS.reduce((acc, track) => {
+        acc[track.key] = { published: 0, draft: 0, finished: 0, total: 0 };
+        return acc;
+    }, {});
 
 export default function Dashboard() {
     const user = useAuthStore((s) => s.user);
-    const [stats, setStats] = useState({ total: 0, published: 0, drafts: 0 });
+    const isViewer = user?.role === 'viewer';
+    const [stats, setStats] = useState({ total: 0, published: 0, drafts: 0, finished: 0, interested: 0 });
     const [animatedPublishedPct, setAnimatedPublishedPct] = useState(0);
     const [animatedDraftPct, setAnimatedDraftPct] = useState(0);
+    const [animatedFinishedPct, setAnimatedFinishedPct] = useState(0);
+    const [animatedInterestedPct, setAnimatedInterestedPct] = useState(0);
     const [recentPocs, setRecentPocs] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [segmentItems, setSegmentItems] = useState({ published: [], draft: [] });
-    const [segmentLoading, setSegmentLoading] = useState({ published: false, draft: false });
-    const [pipelineFilter, setPipelineFilter] = useState('');
+    const [allPocs, setAllPocs] = useState([]);
+    const [pipelineFilter, setPipelineFilter] = useState(null);
+    const [trackStats, setTrackStats] = useState(buildEmptyTrackStats());
 
     const pipelineResetTimerRef = useRef(null);
     const animationFrameRef = useRef(null);
@@ -28,39 +50,48 @@ export default function Dashboard() {
         setLoading(true);
         setError('');
         try {
-            const allRes = await pocService.getAll({ page: 1, limit: 5 });
-            const pocs = allRes.data.pocs;
-            const total = allRes.data.pagination.total;
+            const baseParams = isViewer ? { status: 'published' } : {};
+            const recentRes = await pocService.getAll({ page: 1, limit: 5, ...baseParams });
+            const pocs = recentRes.data.pocs;
+            const total = recentRes.data.pagination.total;
 
-            const publishedRes = await pocService.getAll({ page: 1, limit: 1, status: 'published' });
-            const published = publishedRes.data.pagination.total;
+            const firstTrackPageRes = await pocService.getAll({ page: 1, limit: 100, ...baseParams });
+            const firstTrackPageData = firstTrackPageRes.data;
+            let allTrackPocs = firstTrackPageData.pocs || [];
+            const pages = firstTrackPageData.pagination?.pages || 1;
+            for (let page = 2; page <= pages; page += 1) {
+                const res = await pocService.getAll({ page, limit: 100, ...baseParams });
+                allTrackPocs = allTrackPocs.concat(res.data.pocs || []);
+            }
 
-            setStats({ total, published, drafts: total - published });
+            const computedTrackStats = buildEmptyTrackStats();
+            let published = 0;
+            let draft = 0;
+            let finished = 0;
+            let interested = 0;
+            allTrackPocs.forEach((poc) => {
+                if (poc.status === 'published') published += 1;
+                if (poc.status === 'draft') draft += 1;
+                if (poc.status === 'finished') finished += 1;
+                if (poc.hasVoted) interested += 1;
+                const bucket = computedTrackStats[poc.track];
+                if (!bucket) return;
+                bucket.total += 1;
+                if (poc.status === 'published') bucket.published += 1;
+                else if (poc.status === 'draft') bucket.draft += 1;
+                else if (poc.status === 'finished') bucket.finished += 1;
+            });
+
+            setStats({ total, published, drafts: draft, finished, interested });
             setRecentPocs(pocs);
+            setTrackStats(computedTrackStats);
+            setAllPocs(allTrackPocs);
         } catch {
             setError('Failed to load dashboard data');
         } finally {
             setLoading(false);
         }
-    }, []);
-
-    const fetchSegmentItems = useCallback(async (status) => {
-        if (!status || segmentLoading[status] || segmentItems[status]?.length > 0) return;
-        setSegmentLoading((prev) => ({ ...prev, [status]: true }));
-        try {
-            const firstRes = await pocService.getAll({ page: 1, limit: 100, status });
-            const firstData = firstRes.data;
-            let all = firstData.pocs || [];
-            const pages = firstData.pagination?.pages || 1;
-            for (let page = 2; page <= pages; page += 1) {
-                const res = await pocService.getAll({ page, limit: 100, status });
-                all = all.concat(res.data.pocs || []);
-            }
-            setSegmentItems((prev) => ({ ...prev, [status]: all }));
-        } finally {
-            setSegmentLoading((prev) => ({ ...prev, [status]: false }));
-        }
-    }, [segmentItems, segmentLoading]);
+    }, [isViewer]);
 
     useEffect(() => {
         fetchDashboard();
@@ -73,8 +104,12 @@ export default function Dashboard() {
     useEffect(() => {
         const targetPublished = stats.total ? (stats.published / stats.total) * 100 : 0;
         const targetDraft = stats.total ? (stats.drafts / stats.total) * 100 : 0;
+        const targetFinished = stats.total ? (stats.finished / stats.total) * 100 : 0;
+        const targetInterested = stats.total ? (stats.interested / stats.total) * 100 : 0;
         const startPublished = animatedPublishedPct;
         const startDraft = animatedDraftPct;
+        const startFinished = animatedFinishedPct;
+        const startInterested = animatedInterestedPct;
         const duration = 1000;
         const start = performance.now();
 
@@ -83,6 +118,8 @@ export default function Dashboard() {
             const eased = 1 - (1 - progress) ** 3;
             setAnimatedPublishedPct(startPublished + (targetPublished - startPublished) * eased);
             setAnimatedDraftPct(startDraft + (targetDraft - startDraft) * eased);
+            setAnimatedFinishedPct(startFinished + (targetFinished - startFinished) * eased);
+            setAnimatedInterestedPct(startInterested + (targetInterested - startInterested) * eased);
             if (progress < 1) {
                 animationFrameRef.current = requestAnimationFrame(tick);
             }
@@ -94,19 +131,52 @@ export default function Dashboard() {
         return () => {
             if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
         };
-    }, [stats.total, stats.published, stats.drafts]);
+    }, [stats.total, stats.published, stats.drafts, stats.finished, stats.interested]);
 
     if (loading) return <Spinner size="lg" className="mt-24" />;
     if (error) return <ErrorState message={error} onRetry={fetchDashboard} />;
 
     const publishRate = Math.round(animatedPublishedPct);
     const publishedDeg = Math.max(0, Math.min(360, animatedPublishedPct * 3.6));
+    const draftDeg = isViewer ? 0 : Math.max(0, Math.min(360 - publishedDeg, animatedDraftPct * 3.6));
+    const finishedStartDeg = publishedDeg + draftDeg;
+    const viewerTrackSegments = [];
+    let cumulativeTrackDeg = 0;
+    if (isViewer) {
+        TRACKS.forEach((track) => {
+            const count = trackStats[track.key]?.total || 0;
+            const degrees = stats.total ? (count / stats.total) * 360 : 0;
+            const start = cumulativeTrackDeg;
+            const end = start + degrees;
+            viewerTrackSegments.push({
+                key: track.key,
+                label: track.label,
+                color: track.ringColor,
+                count,
+                start,
+                end,
+            });
+            cumulativeTrackDeg = end;
+        });
+    }
     const ringStyle = {
-        background: `conic-gradient(var(--color-terracotta-500) 0deg ${publishedDeg}deg, var(--color-coral-500) ${publishedDeg}deg 360deg)`,
+        background: isViewer
+            ? `conic-gradient(${viewerTrackSegments.map((segment) => `${segment.color} ${segment.start}deg ${segment.end}deg`).join(', ') || '#e2e8f0 0deg 360deg'})`
+            : `conic-gradient(var(--color-terracotta-500) 0deg ${publishedDeg}deg, var(--color-coral-500) ${publishedDeg}deg ${finishedStartDeg}deg, #16a34a ${finishedStartDeg}deg 360deg)`,
     };
 
-    const activePipelineItems = pipelineFilter ? (segmentItems[pipelineFilter] || []) : [];
-    const activePipelineTitle = pipelineFilter === 'published' ? 'Published Innovations' : 'Draft Innovations';
+    const activePipelineItems = pipelineFilter
+        ? allPocs.filter((poc) => {
+            const interestedMatch = pipelineFilter.interested ? poc.hasVoted : true;
+            const statusMatch = pipelineFilter.status ? poc.status === pipelineFilter.status : true;
+            const trackMatch = pipelineFilter.track ? poc.track === pipelineFilter.track : true;
+            return interestedMatch && statusMatch && trackMatch;
+        })
+        : [];
+    const activeTrackLabel = TRACKS.find((item) => item.key === pipelineFilter?.track)?.label;
+    const activePipelineTitle = pipelineFilter
+        ? `${pipelineFilter.interested ? 'Interested' : pipelineFilter.status ? (pipelineFilter.status === 'published' ? 'Live' : pipelineFilter.status === 'draft' ? 'Draft' : 'Finished') : ''}${activeTrackLabel ? `${pipelineFilter.status || pipelineFilter.interested ? ' · ' : ''}${activeTrackLabel}` : ''} Innovations`
+        : 'Innovation Pipeline';
 
     const detectSegment = (event) => {
         const rect = event.currentTarget.getBoundingClientRect();
@@ -114,32 +184,42 @@ export default function Dashboard() {
         const y = event.clientY - rect.top - rect.height / 2;
         const angleFromTop = (Math.atan2(y, x) * 180) / Math.PI + 90;
         const normalized = (angleFromTop + 360) % 360;
-        return normalized <= publishedDeg ? 'published' : 'draft';
+        if (isViewer) {
+            const clickedTrack = viewerTrackSegments.find((segment) => normalized <= segment.end)?.key;
+            return clickedTrack || TRACKS[TRACKS.length - 1].key;
+        }
+        if (normalized <= publishedDeg) return 'published';
+        if (!isViewer && normalized <= publishedDeg + draftDeg) return 'draft';
+        return 'finished';
     };
 
-    const schedulePipelineReset = () => {
-        if (!pipelineFilter) return;
+    const schedulePipelineReset = (force = false) => {
+        if (!force && !pipelineFilter) return;
         if (pipelineResetTimerRef.current) clearTimeout(pipelineResetTimerRef.current);
         pipelineResetTimerRef.current = setTimeout(() => {
-            setPipelineFilter('');
+            setPipelineFilter(null);
         }, 5000);
     };
 
     const handleRingClick = (event) => {
         const clickedSegment = detectSegment(event);
-        setPipelineFilter(clickedSegment);
-        fetchSegmentItems(clickedSegment);
-        schedulePipelineReset();
+        if (isViewer) {
+            setPipelineFilter({ track: clickedSegment });
+        } else {
+            setPipelineFilter({ status: clickedSegment });
+        }
+        schedulePipelineReset(true);
     };
 
     return (
         <div className="space-y-8">
+            {!isViewer && (
             <div className="rounded-3xl bg-gradient-to-br from-terracotta-900 via-terracotta-700 to-coral-600 p-6 sm:p-8 text-white shadow-lg">
                 <h1 className="text-2xl sm:text-3xl font-bold">Innovation Control Center</h1>
                 <p className="text-white/85 mt-1">
                     Hello {user?.name?.split(' ')[0] || 'there'}, here is your innovation pulse.
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6">
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mt-6">
                     <Link to="/pocs?status=all" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors">
                         <p className="text-xs uppercase tracking-wide text-white/75">Total Innovation Briefs</p>
                         <p className="text-3xl font-bold mt-1">{stats.total}</p>
@@ -152,37 +232,163 @@ export default function Dashboard() {
                         <p className="text-xs uppercase tracking-wide text-white/75">Draft Innovations</p>
                         <p className="text-3xl font-bold mt-1">{stats.drafts}</p>
                     </Link>
+                    <Link to="/pocs?status=finished" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors">
+                        <p className="text-xs uppercase tracking-wide text-white/75">Finished Innovations</p>
+                        <p className="text-3xl font-bold mt-1">{stats.finished}</p>
+                    </Link>
+                </div>
+            </div>
+            )}
+
+            <div>
+                <div className="mb-4">
+                    <h2 className="text-lg font-semibold text-charcoal-800">Track Overview</h2>
+                    <p className="text-sm text-charcoal-500">
+                        {isViewer ? 'Live and finished innovation counts by track.' : 'Live, draft, and finished innovation counts by track.'}
+                    </p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
+                    {TRACKS.map((track) => {
+                        const statsForTrack = trackStats[track.key] || { published: 0, draft: 0, finished: 0, total: 0 };
+                        const publishedPct = statsForTrack.total
+                            ? Math.round((statsForTrack.published / statsForTrack.total) * 100)
+                            : 0;
+                        const draftPct = statsForTrack.total
+                            ? Math.round((statsForTrack.draft / statsForTrack.total) * 100)
+                            : 0;
+                        const finishedPct = statsForTrack.total
+                            ? Math.round((statsForTrack.finished / statsForTrack.total) * 100)
+                            : 0;
+
+                        return (
+                            <Card key={track.key} hover={false} className="p-4 border-sand-200">
+                                <div className="flex items-start justify-between gap-3">
+                                    <p className="text-base font-semibold text-charcoal-800">{track.label}</p>
+                                    <img
+                                        src={track.icon}
+                                        alt={`${track.label} icon`}
+                                        className="h-10 w-10 object-contain shrink-0"
+                                    />
+                                </div>
+                                <p className="mt-1 text-xs text-charcoal-500">{statsForTrack.total} total innovations</p>
+
+                                    <div className="mt-4 space-y-3">
+                                        <div className="space-y-1">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setPipelineFilter({ status: 'published', track: track.key });
+                                                schedulePipelineReset(true);
+                                            }}
+                                            className="w-full flex items-center justify-between text-xs rounded-md px-1 py-0.5 hover:bg-sand-100 transition-colors"
+                                            title={`Show live ${track.label} innovations in pipeline`}
+                                        >
+                                            <span className="text-charcoal-600">Live</span>
+                                            <span className="font-medium text-charcoal-700">{statsForTrack.published}</span>
+                                        </button>
+                                        <div className="h-2 rounded-full bg-sand-100 overflow-hidden">
+                                            <div
+                                                className="h-full rounded-full bg-gradient-to-r from-terracotta-500 to-terracotta-700"
+                                                style={{ width: `${publishedPct}%` }}
+                                            />
+                                        </div>
+                                    </div>
+                                    {!isViewer && (
+                                    <div className="space-y-1">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setPipelineFilter({ status: 'draft', track: track.key });
+                                                schedulePipelineReset(true);
+                                            }}
+                                            className="w-full flex items-center justify-between text-xs rounded-md px-1 py-0.5 hover:bg-sand-100 transition-colors"
+                                            title={`Show draft ${track.label} innovations in pipeline`}
+                                        >
+                                            <span className="text-charcoal-600">Draft</span>
+                                            <span className="font-medium text-charcoal-700">{statsForTrack.draft}</span>
+                                        </button>
+                                        <div className="h-2 rounded-full bg-sand-100 overflow-hidden">
+                                            <div
+                                                className="h-full rounded-full bg-gradient-to-r from-coral-400 to-coral-600"
+                                                style={{ width: `${draftPct}%` }}
+                                            />
+                                        </div>
+                                    </div>
+                                    )}
+                                    <div className="space-y-1">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setPipelineFilter({ status: 'finished', track: track.key });
+                                                schedulePipelineReset(true);
+                                            }}
+                                            className="w-full flex items-center justify-between text-xs rounded-md px-1 py-0.5 hover:bg-sand-100 transition-colors"
+                                            title={`Show finished ${track.label} innovations in pipeline`}
+                                        >
+                                            <span className="text-charcoal-600">Finished</span>
+                                            <span className="font-medium text-charcoal-700">{statsForTrack.finished}</span>
+                                        </button>
+                                        <div className="h-2 rounded-full bg-sand-100 overflow-hidden">
+                                            <div
+                                                className="h-full rounded-full bg-green-600"
+                                                style={{ width: `${finishedPct}%` }}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            </Card>
+                        );
+                    })}
                 </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
                 <Card hover={false} className="p-5 lg:col-span-1">
-                    <h2 className="text-sm font-semibold text-charcoal-700 uppercase tracking-wide">Go-Live Ratio</h2>
+                    <h2 className="text-sm font-semibold text-charcoal-700 uppercase tracking-wide">{isViewer ? 'Track Ratio' : 'Go-Live Ratio'}</h2>
                     <div className="mt-5 relative flex items-center justify-center">
                         <div
                             className="w-36 h-36 rounded-full p-3 cursor-pointer"
                             style={ringStyle}
                             onClick={handleRingClick}
-                            title="Click blue/red segment to filter pipeline"
+                            title={isViewer ? 'Click a track segment to filter pipeline' : 'Click segment to filter pipeline'}
                         >
                             <div className="w-full h-full rounded-full bg-white flex flex-col items-center justify-center">
-                                <p className="text-3xl font-bold text-charcoal-800">{publishRate}%</p>
-                                <p className="text-xs text-charcoal-500">Published</p>
+                                <p className="text-3xl font-bold text-charcoal-800">{isViewer ? stats.total : publishRate}{isViewer ? '' : '%'}</p>
+                                <p className="text-xs text-charcoal-500">{isViewer ? 'Innovations' : 'Published'}</p>
                             </div>
                         </div>
                     </div>
                     <p className="text-sm text-charcoal-500 mt-4 text-center">
-                        {stats.published} live out of {stats.total} innovation briefs.
+                        {isViewer
+                            ? `Track distribution across ${stats.total} innovation briefs.`
+                            : `${stats.published} live out of ${stats.total} innovation briefs.`}
                     </p>
                     <div className="mt-3 flex items-center justify-center gap-4 text-xs">
-                        <span className="inline-flex items-center gap-2 text-charcoal-600">
-                            <span className="w-2.5 h-2.5 rounded-full bg-terracotta-500" />
-                            Published
-                        </span>
-                        <span className="inline-flex items-center gap-2 text-charcoal-600">
-                            <span className="w-2.5 h-2.5 rounded-full bg-coral-500" />
-                            Draft
-                        </span>
+                        {isViewer ? (
+                            <div className="flex flex-wrap items-center justify-center gap-3">
+                                {TRACKS.map((track) => (
+                                    <span key={track.key} className="inline-flex items-center gap-2 text-charcoal-600">
+                                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: track.ringColor }} />
+                                        {track.label}
+                                    </span>
+                                ))}
+                            </div>
+                        ) : (
+                            <>
+                                <span className="inline-flex items-center gap-2 text-charcoal-600">
+                                    <span className="w-2.5 h-2.5 rounded-full bg-terracotta-500" />
+                                    Published
+                                </span>
+                                <span className="inline-flex items-center gap-2 text-charcoal-600">
+                                    <span className="w-2.5 h-2.5 rounded-full bg-coral-500" />
+                                    Draft
+                                </span>
+                                <span className="inline-flex items-center gap-2 text-charcoal-600">
+                                    <span className="w-2.5 h-2.5 rounded-full bg-green-600" />
+                                    Finished
+                                </span>
+                            </>
+                        )}
                     </div>
                 </Card>
 
@@ -210,6 +416,7 @@ export default function Dashboard() {
                                     />
                                 </div>
                             </div>
+                            {!isViewer && (
                             <div>
                                 <div className="flex items-center justify-between text-sm mb-1">
                                     <span className="text-charcoal-600">Draft Innovations</span>
@@ -222,10 +429,41 @@ export default function Dashboard() {
                                     />
                                 </div>
                             </div>
-                        </div>
-                    ) : segmentLoading[pipelineFilter] ? (
-                        <div className="mt-5">
-                            <p className="text-sm text-charcoal-500">Loading...</p>
+                            )}
+                            <div>
+                                <div className="flex items-center justify-between text-sm mb-1">
+                                    <span className="text-charcoal-600">Finished Innovations</span>
+                                    <span className="font-semibold text-charcoal-800">{stats.finished}</span>
+                                </div>
+                                <div className="h-3 rounded-full bg-sand-100 overflow-hidden">
+                                    <div
+                                        className="h-full rounded-full bg-green-600"
+                                        style={{ width: `${animatedFinishedPct}%` }}
+                                    />
+                                </div>
+                            </div>
+                            {isViewer && (
+                                <div>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setPipelineFilter({ interested: true });
+                                            schedulePipelineReset(true);
+                                        }}
+                                        className="w-full flex items-center justify-between text-sm mb-1 rounded-md px-1 py-0.5 hover:bg-sand-100 transition-colors"
+                                        title="Show innovations you marked as interested"
+                                    >
+                                        <span className="text-charcoal-600">Interested Innovations</span>
+                                        <span className="font-semibold text-charcoal-800">{stats.interested}</span>
+                                    </button>
+                                    <div className="h-3 rounded-full bg-sand-100 overflow-hidden">
+                                        <div
+                                            className="h-full rounded-full bg-yellow-500"
+                                            style={{ width: `${animatedInterestedPct}%` }}
+                                        />
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     ) : activePipelineItems.length === 0 ? (
                         <div className="mt-5">
@@ -255,8 +493,8 @@ export default function Dashboard() {
                                         )}
                                         <div className="min-w-0 flex-1">
                                             <div className="flex items-center justify-between gap-2">
-                                                <p className="text-sm font-semibold text-charcoal-800 truncate">{item.title}</p>
-                                                <Badge color={item.status === 'published' ? 'green' : 'amber'}>
+                                                <p className="text-sm font-semibold text-charcoal-800 truncate">{getTitleWithTrack(item)}</p>
+                                                <Badge color={item.status === 'published' ? 'green' : item.status === 'finished' ? 'green' : 'amber'}>
                                                     {item.status}
                                                 </Badge>
                                             </div>
@@ -311,10 +549,10 @@ export default function Dashboard() {
                                         </div>
                                     )}
                                     <div className="flex-1 min-w-0">
-                                        <h3 className="font-semibold text-charcoal-800 truncate">{poc.title}</h3>
+                                        <h3 className="font-semibold text-charcoal-800 truncate">{getTitleWithTrack(poc)}</h3>
                                         <p className="text-sm text-charcoal-500 truncate">{poc.description}</p>
                                         <div className="flex items-center gap-2 mt-1.5">
-                                            <Badge color={poc.status === 'published' ? 'green' : 'amber'}>
+                                            <Badge color={poc.status === 'published' ? 'green' : poc.status === 'finished' ? 'green' : 'amber'}>
                                                 {poc.status}
                                             </Badge>
                                             {poc.techStack?.slice(0, 3).map((t) => (
