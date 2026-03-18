@@ -9,6 +9,20 @@ import Spinner from '../components/ui/Spinner';
 import ErrorState from '../components/ui/ErrorState';
 import EmptyState from '../components/ui/EmptyState';
 import Pagination from '../components/ui/Pagination';
+import useAuthStore from '../store/authStore';
+import { SUPER_ADMIN_EMAIL, isSuperAdmin } from '../utils/access';
+
+const ADMIN_TRACK_OPTIONS = [
+    'Solutions',
+    'Delivery',
+    'Learning',
+    'GTM/Sales',
+    'Organizational Building & Thought Leadership',
+];
+const ADMIN_SCOPE_OPTIONS = [
+    { value: 'track', label: 'Track Admin' },
+    { value: 'global', label: 'Global Admin' },
+];
 
 const ROLE_COLORS = { admin: 'coral', developer: 'terracotta', viewer: 'sand' };
 const getFullName = (user = {}) =>
@@ -26,6 +40,7 @@ const getApiErrorMessage = (err, fallback) => {
 };
 
 export default function UserManagement() {
+    const currentUser = useAuthStore((s) => s.user);
     const [users, setUsers] = useState([]);
     const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0 });
     const [search, setSearch] = useState('');
@@ -33,7 +48,16 @@ export default function UserManagement() {
     const [error, setError] = useState('');
     const [modalOpen, setModalOpen] = useState(false);
     const [editUser, setEditUser] = useState(null);
-    const [formData, setFormData] = useState({ firstName: '', lastName: '', email: '', password: '', role: 'viewer', employeeId: '' });
+    const [formData, setFormData] = useState({
+        firstName: '',
+        lastName: '',
+        email: '',
+        password: '',
+        role: 'viewer',
+        employeeId: '',
+        adminScope: 'track',
+        adminTrack: '',
+    });
     const [formError, setFormError] = useState('');
     const [saving, setSaving] = useState(false);
     const [deleteUser, setDeleteUser] = useState(null);
@@ -62,7 +86,16 @@ export default function UserManagement() {
 
     const openCreateModal = () => {
         setEditUser(null);
-        setFormData({ firstName: '', lastName: '', email: '', password: '', role: 'viewer', employeeId: '' });
+        setFormData({
+            firstName: '',
+            lastName: '',
+            email: '',
+            password: '',
+            role: 'viewer',
+            employeeId: '',
+            adminScope: 'track',
+            adminTrack: '',
+        });
         setFormError('');
         setModalOpen(true);
     };
@@ -78,6 +111,8 @@ export default function UserManagement() {
             password: '',
             role: user.role,
             employeeId: user.employeeId || '',
+            adminScope: user.adminTrack ? 'track' : 'global',
+            adminTrack: user.adminTrack || '',
         });
         setFormError('');
         setModalOpen(true);
@@ -86,8 +121,21 @@ export default function UserManagement() {
     const handleSave = async (e) => {
         e.preventDefault();
         setFormError('');
+        if (!isSuperAdmin(currentUser)) {
+            setFormError('Only the super admin can manage users');
+            return;
+        }
         if (formData.role === 'viewer' && !formData.employeeId.trim()) {
             setFormError('Employee ID is required for viewer users');
+            return;
+        }
+        if (
+            formData.role === 'admin' &&
+            formData.adminScope !== 'global' &&
+            formData.email.trim().toLowerCase() !== SUPER_ADMIN_EMAIL &&
+            !formData.adminTrack
+        ) {
+            setFormError('Please choose which track this admin should manage');
             return;
         }
         setSaving(true);
@@ -95,8 +143,17 @@ export default function UserManagement() {
             const payload = {
                 ...formData,
                 employeeId: formData.employeeId.trim(),
+                adminScope: formData.role === 'admin' ? formData.adminScope : null,
+                adminTrack:
+                    formData.role === 'admin' &&
+                    formData.adminScope !== 'global' &&
+                    formData.email.trim().toLowerCase() !== SUPER_ADMIN_EMAIL
+                        ? formData.adminTrack
+                        : null,
             };
             if (!payload.employeeId) delete payload.employeeId;
+            if (payload.adminTrack === null) delete payload.adminTrack;
+            if (payload.adminScope === null) delete payload.adminScope;
             if (editUser) {
                 if (!payload.password) delete payload.password;
                 await userService.update(editUser._id, payload);
@@ -260,7 +317,14 @@ export default function UserManagement() {
                         <label className="block text-sm font-medium text-charcoal-700">Role</label>
                         <select
                             value={formData.role}
-                            onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                            onChange={(e) =>
+                                setFormData((prev) => ({
+                                    ...prev,
+                                    role: e.target.value,
+                                    adminScope: e.target.value === 'admin' ? prev.adminScope : 'track',
+                                    adminTrack: e.target.value === 'admin' ? prev.adminTrack : '',
+                                }))
+                            }
                             className="w-full rounded-xl border border-sand-300 bg-white px-4 py-2.5 text-sm text-charcoal-800 focus:border-terracotta-400 focus:ring-2 focus:ring-terracotta-100 focus:outline-none transition-all duration-200"
                         >
                             <option value="viewer">Viewer</option>
@@ -268,6 +332,44 @@ export default function UserManagement() {
                             <option value="admin">Admin</option>
                         </select>
                     </div>
+                    {formData.role === 'admin' && formData.email.trim().toLowerCase() !== SUPER_ADMIN_EMAIL && (
+                        <div className="space-y-1.5">
+                            <label className="block text-sm font-medium text-charcoal-700">Admin Type</label>
+                            <select
+                                value={formData.adminScope}
+                                onChange={(e) =>
+                                    setFormData((prev) => ({
+                                        ...prev,
+                                        adminScope: e.target.value,
+                                        adminTrack: e.target.value === 'track' ? prev.adminTrack : '',
+                                    }))
+                                }
+                                className="w-full rounded-xl border border-sand-300 bg-white px-4 py-2.5 text-sm text-charcoal-800 focus:border-terracotta-400 focus:ring-2 focus:ring-terracotta-100 focus:outline-none transition-all duration-200"
+                            >
+                                {ADMIN_SCOPE_OPTIONS.map((scope) => (
+                                    <option key={scope.value} value={scope.value}>{scope.label}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+                    {formData.role === 'admin' &&
+                        formData.email.trim().toLowerCase() !== SUPER_ADMIN_EMAIL &&
+                        formData.adminScope !== 'global' && (
+                        <div className="space-y-1.5">
+                            <label className="block text-sm font-medium text-charcoal-700">Admin Track</label>
+                            <select
+                                value={formData.adminTrack}
+                                onChange={(e) => setFormData({ ...formData, adminTrack: e.target.value })}
+                                className="w-full rounded-xl border border-sand-300 bg-white px-4 py-2.5 text-sm text-charcoal-800 focus:border-terracotta-400 focus:ring-2 focus:ring-terracotta-100 focus:outline-none transition-all duration-200"
+                                required
+                            >
+                                <option value="">Select a track</option>
+                                {ADMIN_TRACK_OPTIONS.map((track) => (
+                                    <option key={track} value={track}>{track}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
                     {formData.role === 'viewer' && (
                         <Input
                             label="Employee ID"

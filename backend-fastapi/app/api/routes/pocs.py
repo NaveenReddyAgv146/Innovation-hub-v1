@@ -8,7 +8,7 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from app.api.deps import get_current_user, require_roles
+from app.api.deps import get_admin_track, get_current_user, require_roles
 from app.core.database import get_db
 from app.utils.serialization import serialize_doc
 
@@ -25,6 +25,26 @@ VALID_TRACKS = {
     "GTM/Sales",
     "Organizational Building & Thought Leadership",
 }
+VALID_IMPACTS = {"High", "Medium", "Low"}
+VALID_ESTIMATED_DURATION_UNITS = {"days", "weeks", "months", "years"}
+VALID_AVAILABILITY_UNITS = {"per day", "per week"}
+AVAILABILITY_UNIT_ALIASES = {
+    "day": "per day",
+    "days": "per day",
+    "per day": "per day",
+    "week": "per week",
+    "weeks": "per week",
+    "per week": "per week",
+}
+
+
+def enforce_admin_track_access(current_user: dict[str, Any], track: str) -> None:
+    admin_track = get_admin_track(current_user)
+    if admin_track and track != admin_track:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"You can only manage ideas in the {admin_track} track",
+        )
 
 
 def parse_tech_stack(raw: str | None) -> list[str]:
@@ -61,6 +81,68 @@ def clean_optional_text(field_name: str, value: str, max_length: int) -> str:
             detail=f"{field_name} cannot exceed {max_length} characters",
         )
     return cleaned
+
+
+def parse_estimated_duration_value(raw_value: str | None) -> int:
+    cleaned = str(raw_value or "").strip()
+    if not cleaned:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Estimated completion time is required",
+        )
+    if not cleaned.isdigit():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Estimated completion time must be a positive number",
+        )
+    value = int(cleaned)
+    if value <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Estimated completion time must be greater than zero",
+        )
+    return value
+
+
+def parse_estimated_duration_unit(raw_value: str | None) -> str:
+    cleaned = str(raw_value or "").strip().lower()
+    if cleaned not in VALID_ESTIMATED_DURATION_UNITS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Estimated completion unit must be days, weeks, months, or years",
+        )
+    return cleaned
+
+
+def parse_availability_value(raw_value: str | None) -> int | None:
+    cleaned = str(raw_value or "").strip()
+    if not cleaned:
+        return None
+    if not cleaned.isdigit():
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Availability must be a positive number",
+        )
+    value = int(cleaned)
+    if value <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Availability must be greater than zero",
+        )
+    return value
+
+
+def parse_availability_unit(raw_value: str | None) -> str | None:
+    cleaned = str(raw_value or "").strip().lower()
+    if not cleaned:
+        return None
+    normalized = AVAILABILITY_UNIT_ALIASES.get(cleaned)
+    if normalized not in VALID_AVAILABILITY_UNITS:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Availability unit must be per day or per week",
+        )
+    return normalized
 
 
 async def save_thumbnail(file: UploadFile | None) -> str:
@@ -124,6 +206,7 @@ async def get_pocs(
     search: str = "",
     tag: str = "",
     track: str = "",
+    impact: str = "",
     interested: bool = Query(default=False),
     status_filter: str = Query(default="", alias="status"),
     author: str = "",
@@ -145,6 +228,11 @@ async def get_pocs(
         if track not in VALID_TRACKS:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid track")
         query_parts.append({"track": track})
+
+    if impact:
+        if impact not in VALID_IMPACTS:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid impact")
+        query_parts.append({"impact": impact})
 
     current_user_object_id = ObjectId(current_user["id"])
     if interested:
@@ -243,6 +331,9 @@ async def create_poc(
     customerClassification: str = Form(default="Existing"),
     challenges: str = Form(default=""),
     requestorName: str = Form(default=""),
+    impact: str = Form(...),
+    estimatedDurationValue: str = Form(...),
+    estimatedDurationUnit: str = Form(...),
     techStack: str = Form(default="[]"),
     demoLink: str = Form(default=""),
     repoLink: str = Form(default=""),
@@ -259,6 +350,9 @@ async def create_poc(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid status")
     if track not in VALID_TRACKS:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid track")
+    if impact not in VALID_IMPACTS:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid impact")
+    enforce_admin_track_access(current_user, track)
 
     thumbnail_path = await save_thumbnail(thumbnail)
     now = datetime.now(timezone.utc)
@@ -277,6 +371,8 @@ async def create_poc(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Requestor name cannot exceed 100 characters")
 
     cleaned_repo_link = repositoryLink.strip() or repoLink.strip()
+    estimated_duration_value = parse_estimated_duration_value(estimatedDurationValue)
+    estimated_duration_unit = parse_estimated_duration_unit(estimatedDurationUnit)
     cleaned_point_of_contact = pointOfContact.strip()
     if len(cleaned_point_of_contact) > 100:
         raise HTTPException(
@@ -299,6 +395,9 @@ async def create_poc(
         "repositoryLink": cleaned_repo_link,
         "thumbnail": thumbnail_path,
         "status": status_value,
+        "impact": impact,
+        "estimatedDurationValue": estimated_duration_value,
+        "estimatedDurationUnit": estimated_duration_unit,
         "votes": [],
         "author": ObjectId(current_user["id"]),
         "createdAt": now,
@@ -328,6 +427,9 @@ async def update_poc(
     customerClassification: str | None = Form(default=None),
     challenges: str | None = Form(default=None),
     requestorName: str | None = Form(default=None),
+    impact: str | None = Form(default=None),
+    estimatedDurationValue: str | None = Form(default=None),
+    estimatedDurationUnit: str | None = Form(default=None),
     techStack: str | None = Form(default=None),
     demoLink: str | None = Form(default=None),
     repoLink: str | None = Form(default=None),
@@ -339,6 +441,7 @@ async def update_poc(
 ):
     poc = await fetch_poc_or_404(db, poc_id)
     enforce_owner_or_admin(poc, current_user)
+    enforce_admin_track_access(current_user, str(poc.get("track") or ""))
 
     updates: dict[str, Any] = {}
     if title is not None:
@@ -350,6 +453,7 @@ async def update_poc(
     if track is not None:
         if track not in VALID_TRACKS:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid track")
+        enforce_admin_track_access(current_user, track)
         updates["track"] = track
     if pointOfContact is not None:
         cleaned_poc = pointOfContact.strip()
@@ -373,6 +477,14 @@ async def update_poc(
                 detail="Requestor Name cannot exceed 100 characters",
             )
         updates["requestorName"] = cleaned_requestor
+    if impact is not None:
+        if impact not in VALID_IMPACTS:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid impact")
+        updates["impact"] = impact
+    if estimatedDurationValue is not None:
+        updates["estimatedDurationValue"] = parse_estimated_duration_value(estimatedDurationValue)
+    if estimatedDurationUnit is not None:
+        updates["estimatedDurationUnit"] = parse_estimated_duration_unit(estimatedDurationUnit)
     if techStack is not None:
         updates["techStack"] = parse_tech_stack(techStack)
     if demoLink is not None:
@@ -438,7 +550,8 @@ async def publish_poc(
     current_user=Depends(require_roles("admin")),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
-    await fetch_poc_or_404(db, poc_id)
+    poc = await fetch_poc_or_404(db, poc_id)
+    enforce_admin_track_access(current_user, str(poc.get("track") or ""))
     await db.pocs.update_one(
         {"_id": ObjectId(poc_id)},
         {"$set": {"status": "published", "updatedAt": datetime.now(timezone.utc)}},
@@ -464,6 +577,13 @@ async def finish_poc(
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     poc = await fetch_poc_or_404(db, poc_id)
+    admin_track = get_admin_track(current_user)
+    poc_track = str(poc.get("track") or "")
+    if admin_track and poc_track != admin_track:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"This innovation belongs to the {poc_track} track. You can only mark {admin_track} track innovations as finished.",
+        )
     if poc.get("status") != "published":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -495,6 +615,7 @@ async def mark_poc_as_draft(
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     poc = await fetch_poc_or_404(db, poc_id)
+    enforce_admin_track_access(current_user, str(poc.get("track") or ""))
     if poc.get("status") != "published":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -522,6 +643,8 @@ async def mark_poc_as_draft(
 @router.post("/{poc_id}/upvote")
 async def upvote_poc(
     poc_id: str,
+    availabilityValue: str | None = Form(default=None),
+    availabilityUnit: str | None = Form(default=None),
     current_user=Depends(get_current_user),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
@@ -543,13 +666,34 @@ async def upvote_poc(
         )
 
     current_user_id = ObjectId(current_user["id"])
+    availability_value = parse_availability_value(availabilityValue)
+    availability_unit = parse_availability_unit(availabilityUnit)
+    if (availability_value is None) != (availability_unit is None):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Please provide both availability value and unit",
+        )
     await db.pocs.update_one(
         {"_id": ObjectId(poc_id)},
         {
             "$addToSet": {"votes": current_user_id},
+            "$pull": {"interestDetails": {"userId": current_user_id}},
             "$set": {"updatedAt": datetime.now(timezone.utc)},
         },
     )
+    if availability_value is not None and availability_unit is not None:
+        await db.pocs.update_one(
+            {"_id": ObjectId(poc_id)},
+            {
+                "$push": {
+                    "interestDetails": {
+                        "userId": current_user_id,
+                        "availabilityValue": availability_value,
+                        "availabilityUnit": availability_unit,
+                    }
+                }
+            },
+        )
     updated = await db.pocs.find_one({"_id": ObjectId(poc_id)})
     serialized = serialize_doc(updated)
     await enrich_author_info(db, serialized)
@@ -578,7 +722,7 @@ async def remove_upvote_poc(
     await db.pocs.update_one(
         {"_id": ObjectId(poc_id)},
         {
-            "$pull": {"votes": current_user_id},
+            "$pull": {"votes": current_user_id, "interestDetails": {"userId": current_user_id}},
             "$set": {"updatedAt": datetime.now(timezone.utc)},
         },
     )
@@ -605,8 +749,22 @@ async def get_poc_voters(
     if not voter_ids:
         return {"voters": []}
 
+    availability_map = {}
+    for item in poc.get("interestDetails") or []:
+        user_id = item.get("userId")
+        if isinstance(user_id, ObjectId):
+            availability_map[str(user_id)] = {
+                "availabilityValue": item.get("availabilityValue"),
+                "availabilityUnit": item.get("availabilityUnit"),
+            }
+
     voters = await db.users.find(
         {"_id": {"$in": voter_ids}},
         {"name": 1, "email": 1, "role": 1},
     ).to_list(length=len(voter_ids))
-    return {"voters": serialize_doc(voters)}
+    serialized_voters = serialize_doc(voters)
+    for voter in serialized_voters:
+        availability = availability_map.get(voter["_id"], {})
+        voter["availabilityValue"] = availability.get("availabilityValue")
+        voter["availabilityUnit"] = availability.get("availabilityUnit")
+    return {"voters": serialized_voters}

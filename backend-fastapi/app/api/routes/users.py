@@ -4,7 +4,8 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from app.api.deps import require_roles
+from app.api.deps import get_admin_track, require_roles, require_super_admin
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import hash_password
 from app.schemas.auth import compose_full_name
@@ -14,12 +15,31 @@ from app.utils.serialization import serialize_doc
 router = APIRouter(prefix="/users", tags=["users"])
 
 
+def validate_admin_track(role: str, email: str, admin_scope: str | None, admin_track: str | None) -> str | None:
+    normalized_email = email.strip().lower()
+    normalized_track = admin_track.strip() if isinstance(admin_track, str) else None
+    normalized_scope = admin_scope.strip().lower() if isinstance(admin_scope, str) else None
+    if role == "admin":
+        if normalized_email == settings.super_admin_email.strip().lower():
+            return None
+        inferred_scope = normalized_scope or ("track" if normalized_track else "global")
+        if inferred_scope == "global":
+            return None
+        if not normalized_track:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Admin track is required for admin users",
+            )
+        return normalized_track
+    return None
+
+
 @router.get("")
 async def get_users(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=10, ge=1, le=100),
     search: str = "",
-    _admin=Depends(require_roles("admin")),
+    _admin=Depends(require_super_admin),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     query: dict = {}
@@ -50,15 +70,48 @@ async def get_users(
 @router.get("/interests")
 async def get_user_interests(
     search: str = "",
-    _admin=Depends(require_roles("admin")),
+    current_user=Depends(require_roles("admin")),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
+    admin_track = get_admin_track(current_user)
     pipeline: list[dict] = [
-        {"$match": {"status": {"$in": ["published", "finished"]}, "votes.0": {"$exists": True}}},
-        {"$unwind": "$votes"},
+        {
+            "$match": {
+                "status": {"$in": ["published", "finished"]},
+                "$or": [{"votes.0": {"$exists": True}}, {"interestDetails.0": {"$exists": True}}],
+            }
+        },
+    ]
+
+    if admin_track:
+        pipeline.append({"$match": {"track": admin_track}})
+
+    pipeline.extend([
+        {
+            "$addFields": {
+                "interestEntries": {
+                    "$cond": [
+                        {"$gt": [{"$size": {"$ifNull": ["$interestDetails", []]}}, 0]},
+                        "$interestDetails",
+                        {
+                            "$map": {
+                                "input": {"$ifNull": ["$votes", []]},
+                                "as": "voteUser",
+                                "in": {
+                                    "userId": "$$voteUser",
+                                    "availabilityValue": None,
+                                    "availabilityUnit": None,
+                                },
+                            }
+                        },
+                    ]
+                }
+            }
+        },
+        {"$unwind": "$interestEntries"},
         {
             "$group": {
-                "_id": "$votes",
+                "_id": "$interestEntries.userId",
                 "interestedCount": {"$sum": 1},
                 "projects": {
                     "$push": {
@@ -67,6 +120,8 @@ async def get_user_interests(
                         "track": "$track",
                         "status": "$status",
                         "updatedAt": "$updatedAt",
+                        "availabilityValue": "$interestEntries.availabilityValue",
+                        "availabilityUnit": "$interestEntries.availabilityUnit",
                     }
                 },
             }
@@ -80,7 +135,7 @@ async def get_user_interests(
             }
         },
         {"$unwind": "$user"},
-    ]
+    ])
 
     if search:
         regex = {"$regex": search, "$options": "i"}
@@ -113,7 +168,7 @@ async def get_user_interests(
 @router.get("/{user_id}")
 async def get_user_by_id(
     user_id: str,
-    _admin=Depends(require_roles("admin")),
+    _admin=Depends(require_super_admin),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     if not ObjectId.is_valid(user_id):
@@ -129,7 +184,7 @@ async def get_user_by_id(
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_user(
     payload: CreateUserRequest,
-    _admin=Depends(require_roles("admin")),
+    _admin=Depends(require_super_admin),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     existing = await db.users.find_one({"email": payload.email.lower()})
@@ -139,6 +194,7 @@ async def create_user(
     now = datetime.now(timezone.utc)
     first_name = payload.firstName.strip()
     last_name = payload.lastName.strip()
+    admin_track = validate_admin_track(payload.role, payload.email, payload.adminScope, payload.adminTrack)
     doc = {
         "firstName": first_name,
         "lastName": last_name,
@@ -147,6 +203,7 @@ async def create_user(
         "employeeId": payload.employeeId,
         "password": hash_password(payload.password),
         "role": payload.role,
+        "adminTrack": admin_track,
         "refreshToken": None,
         "createdAt": now,
         "updatedAt": now,
@@ -161,7 +218,7 @@ async def create_user(
 async def update_user(
     user_id: str,
     payload: UpdateUserRequest,
-    _admin=Depends(require_roles("admin")),
+    _admin=Depends(require_super_admin),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     if not ObjectId.is_valid(user_id):
@@ -199,11 +256,18 @@ async def update_user(
 
     target_role = updates.get("role", existing_user.get("role"))
     target_employee_id = updates.get("employeeId", existing_user.get("employeeId"))
+    target_email = updates.get("email", existing_user.get("email", ""))
+    target_admin_scope = updates.get("adminScope")
+    if target_admin_scope is None:
+        target_admin_scope = "track" if existing_user.get("adminTrack") else "global"
+    target_admin_track = updates.get("adminTrack", existing_user.get("adminTrack"))
     if target_role == "viewer" and not target_employee_id:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Employee ID is required for viewer users",
         )
+    updates["adminTrack"] = validate_admin_track(target_role, target_email, target_admin_scope, target_admin_track)
+    updates.pop("adminScope", None)
 
     if updates:
         updates["updatedAt"] = datetime.now(timezone.utc)
@@ -216,7 +280,7 @@ async def update_user(
 @router.delete("/{user_id}")
 async def delete_user(
     user_id: str,
-    _admin=Depends(require_roles("admin")),
+    _admin=Depends(require_super_admin),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     if not ObjectId.is_valid(user_id):

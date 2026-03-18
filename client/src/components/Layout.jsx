@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import useAuthStore from '../store/authStore';
 import { authService } from '../services/endpoints';
 import { COMPANY_LOGO_URL, COMPANY_NAME } from '../config/branding';
-import { getSubadminTrack } from '../utils/subadminTrack';
+import { getAssignedAdminTrack, hasTrackDashboardAccess, isSuperAdmin } from '../utils/access';
 
 const THEME_STORAGE_KEY = 'poc_theme';
 
@@ -13,7 +13,7 @@ export default function Layout({ children }) {
         localStorage.getItem(THEME_STORAGE_KEY) === 'dark' ? 'dark' : 'light'
     );
     const user = useAuthStore((s) => s.user);
-    const subadminTrack = getSubadminTrack(user?.email);
+    const adminTrack = getAssignedAdminTrack(user);
     const logoutStore = useAuthStore((s) => s.logout);
     const navigate = useNavigate();
     const location = useLocation();
@@ -30,7 +30,7 @@ export default function Layout({ children }) {
 
     const navItems = [
         { path: '/dashboard', label: 'Dashboard', icon: HomeIcon },
-        { path: '/pocs', label: 'Innovations', icon: BoltIcon },
+        { path: '/pocs', label: 'Contributions', icon: BoltIcon },
     ];
 
     if (user?.role === 'viewer') {
@@ -38,17 +38,20 @@ export default function Layout({ children }) {
     }
 
     if (user?.role === 'admin' || user?.role === 'developer') {
-        navItems.push({ path: '/pocs/new', label: 'New Innovation Brief', icon: PlusIcon });
+        navItems.push({ path: '/pocs/new', label: 'New Contribution Brief', icon: PlusIcon });
     }
 
     if (user?.role === 'admin') {
-        navItems.push({ path: '/admin/idea-reviews', label: 'Idea Reviews', icon: ReviewIcon });
+        navItems.push({ path: '/admin/idea-reviews', label: 'Contribution Reviews', icon: ReviewIcon });
         navItems.push({ path: '/admin/user-interests', label: 'User Interests', icon: StarIcon });
+    }
+
+    if (isSuperAdmin(user)) {
         navItems.push({ path: '/users', label: 'Users', icon: UsersIcon });
     }
 
-    if (subadminTrack) {
-        navItems.push({ path: '/dashboard/track', label: 'My Track Dashboard', icon: ScopeIcon });
+    if (hasTrackDashboardAccess(user)) {
+        navItems.push({ path: '/dashboard/track', label: `My Track Dashboard`, icon: ScopeIcon });
     }
 
     const isInterestedRoute =
@@ -145,7 +148,9 @@ export default function Layout({ children }) {
                         </div>
                         <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium text-charcoal-800 truncate">{user?.name}</p>
-                            <p className="text-xs text-charcoal-500 capitalize">{user?.role}</p>
+                            <p className="text-xs text-charcoal-500 capitalize">
+                                {user?.role}{adminTrack ? ` · ${adminTrack}` : ''}
+                            </p>
                         </div>
                     </div>
                     <button

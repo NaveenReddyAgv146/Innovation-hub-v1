@@ -4,6 +4,7 @@ import Spinner from './components/ui/Spinner';
 import ProtectedRoute from './components/guards/ProtectedRoute';
 import RoleRoute from './components/guards/RoleRoute';
 import Layout from './components/Layout';
+import { isSuperAdmin } from './utils/access';
 
 /* Lazy-loaded pages for code splitting */
 const Login = lazy(() => import('./pages/Login'));
@@ -28,6 +29,14 @@ function AppLayout({ children }) {
       <Layout>{children}</Layout>
     </ProtectedRoute>
   );
+}
+
+function SuperAdminRoute({ children }) {
+  const user = JSON.parse(localStorage.getItem('poc_user') || 'null');
+  if (!isSuperAdmin(user)) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return children;
 }
 
 export default function App() {
@@ -113,9 +122,9 @@ export default function App() {
             path="/users"
             element={
               <AppLayout>
-                <RoleRoute roles={['admin']}>
+                <SuperAdminRoute>
                   <UserManagement />
-                </RoleRoute>
+                </SuperAdminRoute>
               </AppLayout>
             }
           />

@@ -37,7 +37,15 @@ export const pocService = {
     publish: (id) => api.post(`/pocs/${id}/publish`),
     finish: (id) => api.post(`/pocs/${id}/finish`),
     markDraft: (id) => api.post(`/pocs/${id}/mark-draft`),
-    upvote: (id) => api.post(`/pocs/${id}/upvote`),
+    upvote: (id, data) => {
+        const formData = new FormData();
+        Object.entries(data || {}).forEach(([key, value]) => {
+            if (value !== undefined && value !== null && value !== '') {
+                formData.append(key, value);
+            }
+        });
+        return api.post(`/pocs/${id}/upvote`, formData);
+    },
     removeUpvote: (id) => api.delete(`/pocs/${id}/upvote`),
     getVoters: (id) => api.get(`/pocs/${id}/voters`),
 };

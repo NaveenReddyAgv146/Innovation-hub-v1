@@ -5,11 +5,14 @@ Innovation Hub is a full-stack platform for collecting, reviewing, publishing, a
 ## What This App Supports
 
 - JWT authentication (`register`, `login`, `refresh`, `logout`, `me`)
-- Role-based flows for `admin`, and `viewer`
-- POC CRUD with status (`draft` / `published`)
+- Role-based flows for `admin`, `developer`, and `viewer`
+- Super admin flow for `admin@agivant.com`
+- Track admin flow with `My Track Dashboard`
+- POC CRUD with status (`draft` / `published` / `finished`)
 - Admin-only publish workflow through Idea Reviews
+- Track-scoped creation and publishing for track admins
 - Interest voting on published ideas (non-admin, non-owner)
-- User management (admin only)
+- User management (super admin only)
 - Image upload for POC thumbnails (`/uploads`)
 - Dark mode with persisted preference
 - Publish success notification in Idea Reviews
@@ -92,11 +95,12 @@ APP_ENV=development
 PORT=8000
 MONGODB_URI=mongodb://127.0.0.1:27017/poc_showcase
 MONGODB_DB_NAME=poc_showcase
-CLIENT_URL=http://localhost:5175
+CLIENT_URL=http://localhost:5173
 JWT_ACCESS_SECRET=replace_with_a_secure_access_secret
 JWT_REFRESH_SECRET=replace_with_a_secure_refresh_secret
 JWT_ACCESS_EXPIRY_MINUTES=15
 JWT_REFRESH_EXPIRY_DAYS=7
+SUPER_ADMIN_EMAIL=admin@agivant.com
 ```
 
 Run backend:
@@ -121,7 +125,7 @@ VITE_BACKEND_URL=http://localhost:8010
 Run frontend:
 
 ```powershell
-npm run dev -- --host 127.0.0.1 --port 5175 --strictPort
+npm run dev -- --host 127.0.0.1 --port 5173 --strictPort
 ```
 
 The frontend proxies `/api` and `/uploads` to `VITE_BACKEND_URL`.
@@ -136,14 +140,30 @@ python -m scripts.seed_admin
 
 Default admin credentials:
 
-- Email: `admin@pocshowcase.com`
+- Email: `admin@agivant.com`
 - Password: `admin123`
 
 ## Role Behavior
 
-- `admin`: manage users, review/publish ideas, create/edit/delete any POC, view interested users
-- `developer`: create POCs, edit/delete own POCs, mark interest on other published POCs ( next versions)
+- `admin@agivant.com`:
+  super admin; can manage users, create track admins, review/publish ideas across all tracks, and view interested users
+- Track admin:
+  an `admin` user with an assigned `adminTrack`; can access `My Track Dashboard`, create innovations only in that track, and publish/manage draft innovations only in that track
+- `developer`: create POCs, edit/delete own POCs, mark interest on other published POCs
 - `viewer`: browse published POCs, submit draft ideas, mark interest on eligible published POCs
+
+## Track Admin Behavior
+
+- When the super admin creates an `admin`, the app asks which track that admin belongs to.
+- Supported tracks:
+  `Solutions`, `Delivery`, `Learning`, `GTM/Sales`, `Organizational Building & Thought Leadership`
+- A track admin can:
+  access `My Track Dashboard`
+  create new innovations only in the assigned track
+  review/publish only draft ideas in the assigned track
+- A track admin cannot:
+  access the `Users` section
+  manage ideas outside the assigned track
 
 ## API Overview
 
@@ -151,8 +171,13 @@ Base prefix: `/api`
 
 - Health: `GET /health`
 - Auth: `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `GET /auth/me`
-- Users: `GET /users`, `GET /users/{user_id}`, `POST /users`, `PUT /users/{user_id}`, `DELETE /users/{user_id}`
-- POCs: `GET /pocs`, `GET /pocs/{poc_id}`, `POST /pocs`, `PUT /pocs/{poc_id}`, `DELETE /pocs/{poc_id}`, `POST /pocs/{poc_id}/publish`, `POST /pocs/{poc_id}/upvote`, `DELETE /pocs/{poc_id}/upvote`, `GET /pocs/{poc_id}/voters`
+- Users:
+  `GET /users`, `GET /users/{user_id}`, `POST /users`, `PUT /users/{user_id}`, `DELETE /users/{user_id}` (super admin only)
+  `GET /users/interests` (admin access)
+- POCs:
+  `GET /pocs`, `GET /pocs/{poc_id}`, `POST /pocs`, `PUT /pocs/{poc_id}`, `DELETE /pocs/{poc_id}`
+  `POST /pocs/{poc_id}/publish`, `POST /pocs/{poc_id}/finish`, `POST /pocs/{poc_id}/mark-draft`
+  `POST /pocs/{poc_id}/upvote`, `DELETE /pocs/{poc_id}/upvote`, `GET /pocs/{poc_id}/voters`
 
 Uploads are served at `/uploads`.
 
@@ -168,7 +193,8 @@ From `client/`:
 ## Backend Run Notes
 
 - `PORT` in `.env` is app config, but local run port is controlled by uvicorn command.
-- Keep `CLIENT_URL` and frontend dev URL aligned (`http://localhost:5175` in this setup).
+- Keep `CLIENT_URL` and frontend dev URL aligned (`http://localhost:5173` in this setup).
+- If you change the super admin email, also update `SUPER_ADMIN_EMAIL` in backend `.env`.
 
 ## Deploy to Vercel (Frontend + Backend)
 
@@ -225,3 +251,9 @@ After frontend URL is live:
 - Current thumbnail uploads are stored on local filesystem.
 - On Vercel, filesystem is ephemeral (`/tmp`), so uploaded files are not permanent.
 - For production, move uploads to external storage (Cloudinary, S3, or similar).
+
+
+
+cmd /c npm run dev -- --host 127.0.0.1 --port 5173 --strictPort
+
+.\.venv\Scripts\python -m uvicorn app.main:app --host 127.0.0.1 --port 8010

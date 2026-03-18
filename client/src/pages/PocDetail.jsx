@@ -4,12 +4,22 @@ import useAuthStore from '../store/authStore';
 import { pocService } from '../services/endpoints';
 import Badge from '../components/ui/Badge';
 import Button from '../components/ui/Button';
+import Input from '../components/ui/Input';
 import Spinner from '../components/ui/Spinner';
 import ErrorState from '../components/ui/ErrorState';
 import Modal from '../components/ui/Modal';
 
 const getAuthorName = (author = {}) =>
     [author.firstName, author.lastName].filter(Boolean).join(' ').trim() || author.name || 'Unknown';
+const AVAILABILITY_UNITS = ['per day', 'per week'];
+
+const getApiErrorMessage = (err, fallback) => {
+    const data = err?.response?.data;
+    if (!data) return fallback;
+    if (typeof data.detail === 'string' && data.detail.trim()) return data.detail;
+    if (typeof data.message === 'string' && data.message.trim()) return data.message;
+    return fallback;
+};
 
 export default function PocDetail() {
     const { id } = useParams();
@@ -22,6 +32,9 @@ export default function PocDetail() {
     const [finishing, setFinishing] = useState(false);
     const [markingDraft, setMarkingDraft] = useState(false);
     const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+    const [interestModalOpen, setInterestModalOpen] = useState(false);
+    const [availabilityValue, setAvailabilityValue] = useState('');
+    const [availabilityUnit, setAvailabilityUnit] = useState('weeks');
     const [voting, setVoting] = useState(false);
     const [voters, setVoters] = useState([]);
     const [votersLoading, setVotersLoading] = useState(false);
@@ -34,7 +47,7 @@ export default function PocDetail() {
             const { data } = await pocService.getById(id);
             setPoc(data.poc);
         } catch {
-            setError('Failed to load innovation brief');
+            setError('Failed to load contribution brief');
         } finally {
             setLoading(false);
         }
@@ -52,6 +65,9 @@ export default function PocDetail() {
     const canViewVoters = user?.role === 'admin' || isOwner;
     const canVote = poc?.status === 'published' && user?.role !== 'admin' && !isOwner;
     const authorName = getAuthorName(poc?.author);
+    const currentUserAvailability = voters.find(
+        (voter) => (voter._id || voter.id) === (user?._id || user?.id)
+    );
 
     const fetchVoters = useCallback(async () => {
         if (!canViewVoters || !id) return;
@@ -82,7 +98,7 @@ export default function PocDetail() {
             setDeleteModalOpen(false);
             navigate('/pocs');
         } catch {
-            setError('Failed to delete innovation brief');
+            setError('Failed to delete contribution brief');
             setDeleting(false);
         }
     };
@@ -93,11 +109,23 @@ export default function PocDetail() {
 
     const handleToggleInterest = async () => {
         if (!canVote || !poc) return;
+        setError('');
+        setAvailabilityValue(currentUserAvailability?.availabilityValue?.toString() || '');
+        setAvailabilityUnit(currentUserAvailability?.availabilityUnit || 'per week');
+        setInterestModalOpen(true);
+    };
+
+    const confirmInterest = async () => {
+        if (!poc?._id || !availabilityValue.trim()) {
+            setError('Please enter how many hours you are free');
+            return;
+        }
         setVoting(true);
         try {
-            const { data } = poc.hasVoted
-                ? await pocService.removeUpvote(poc._id)
-                : await pocService.upvote(poc._id);
+            const { data } = await pocService.upvote(poc._id, {
+                availabilityValue,
+                availabilityUnit,
+            });
             setPoc((prev) => {
                 const nextPoc = data.poc || {};
                 const author =
@@ -106,9 +134,36 @@ export default function PocDetail() {
                         : prev?.author;
                 return { ...prev, ...nextPoc, author };
             });
+            setInterestModalOpen(false);
+            setAvailabilityValue('');
+            setAvailabilityUnit('per week');
             if (canViewVoters) fetchVoters();
-        } catch {
-            setError('Failed to update interest');
+        } catch (err) {
+            setError(getApiErrorMessage(err, 'Failed to update interest'));
+        } finally {
+            setVoting(false);
+        }
+    };
+
+    const handleRemoveInterest = async () => {
+        if (!poc?._id || !poc.hasVoted) return;
+        setVoting(true);
+        try {
+            const { data } = await pocService.removeUpvote(poc._id);
+            setPoc((prev) => {
+                const nextPoc = data.poc || {};
+                const author =
+                    nextPoc.author && typeof nextPoc.author === 'object'
+                        ? nextPoc.author
+                        : prev?.author;
+                return { ...prev, ...nextPoc, author };
+            });
+            setInterestModalOpen(false);
+            setAvailabilityValue('');
+            setAvailabilityUnit('per week');
+            if (canViewVoters) fetchVoters();
+        } catch (err) {
+            setError(getApiErrorMessage(err, 'Failed to update interest'));
         } finally {
             setVoting(false);
         }
@@ -120,8 +175,8 @@ export default function PocDetail() {
         try {
             const { data } = await pocService.finish(poc._id);
             setPoc((prev) => ({ ...prev, ...(data.poc || {}) }));
-        } catch {
-            setError('Failed to mark innovation as finished');
+        } catch (err) {
+            setError(getApiErrorMessage(err, 'Failed to mark contribution as finished'));
         } finally {
             setFinishing(false);
         }
@@ -133,8 +188,8 @@ export default function PocDetail() {
         try {
             const { data } = await pocService.markDraft(poc._id);
             setPoc((prev) => ({ ...prev, ...(data.poc || {}) }));
-        } catch {
-            setError('Failed to move innovation to draft');
+        } catch (err) {
+            setError(getApiErrorMessage(err, 'Failed to move contribution to draft'));
         } finally {
             setMarkingDraft(false);
         }
@@ -146,28 +201,30 @@ export default function PocDetail() {
 
     return (
         <div className="max-w-4xl mx-auto space-y-6">
-            {/* Back */}
             <Link to="/pocs" className="inline-flex items-center gap-1 text-sm text-charcoal-500 hover:text-terracotta-500 transition-colors">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
                 </svg>
-                Back to Innovations
+                Back to Contributions
             </Link>
 
-            {/* Thumbnail */}
             {poc.thumbnail && (
                 <div className="aspect-video rounded-2xl overflow-hidden bg-sand-100 shadow-sm">
                     <img src={poc.thumbnail} alt={poc.title} className="w-full h-full object-cover" />
                 </div>
             )}
 
-            {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                 <div className="space-y-2">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                         <Badge color={poc.status === 'published' ? 'green' : poc.status === 'finished' ? 'green' : 'amber'}>
                             {poc.status}
                         </Badge>
+                        {poc.impact && (
+                            <Badge color={poc.impact === 'High' ? 'coral' : poc.impact === 'Medium' ? 'terracotta' : 'sand'}>
+                                {poc.impact} impact
+                            </Badge>
+                        )}
                         <span className="text-sm text-charcoal-500">
                             {(poc.votesCount || 0)} interested
                         </span>
@@ -224,7 +281,6 @@ export default function PocDetail() {
                 </div>
             )}
 
-            {/* Description */}
             <div className="bg-white rounded-2xl border border-sand-200 p-6">
                 <h2 className="text-lg font-semibold text-charcoal-800 mb-3">About</h2>
                 <p className="text-charcoal-600 whitespace-pre-line leading-relaxed">
@@ -232,7 +288,6 @@ export default function PocDetail() {
                 </p>
             </div>
 
-            {/* Idea Details */}
             <div className="bg-white rounded-2xl border border-sand-200 p-6 space-y-4">
                 <h2 className="text-lg font-semibold text-charcoal-800">Idea Submission Details</h2>
 
@@ -247,9 +302,7 @@ export default function PocDetail() {
                     </div>
                     <div className="space-y-1">
                         <p className="text-xs uppercase tracking-wide text-charcoal-400">Requestor Name</p>
-                        <p className="text-sm text-charcoal-700">
-                            {poc.requestorName || authorName || '-'}
-                        </p>
+                        <p className="text-sm text-charcoal-700">{poc.requestorName || authorName || '-'}</p>
                     </div>
                     <div className="space-y-1">
                         <p className="text-xs uppercase tracking-wide text-charcoal-400">Status</p>
@@ -260,22 +313,31 @@ export default function PocDetail() {
                         <p className="text-sm text-charcoal-700">{poc.track || '-'}</p>
                     </div>
                     <div className="space-y-1">
+                        <p className="text-xs uppercase tracking-wide text-charcoal-400">Impact</p>
+                        <p className="text-sm text-charcoal-700">{poc.impact || '-'}</p>
+                    </div>
+                    <div className="space-y-1">
+                        <p className="text-xs uppercase tracking-wide text-charcoal-400">Estimated Completion Time</p>
+                        <p className="text-sm text-charcoal-700">
+                            {poc.estimatedDurationValue && poc.estimatedDurationUnit
+                                ? `${poc.estimatedDurationValue} ${poc.estimatedDurationUnit}`
+                                : '-'}
+                        </p>
+                    </div>
+                    <div className="space-y-1">
                         <p className="text-xs uppercase tracking-wide text-charcoal-400">Point of Contact</p>
                         <p className="text-sm text-charcoal-700">{poc.pointOfContact || '-'}</p>
                     </div>
                 </div>
 
                 <div className="space-y-1">
-                    <p className="text-xs uppercase tracking-wide text-charcoal-400">
-                        Current Challenges / Requirements
-                    </p>
+                    <p className="text-xs uppercase tracking-wide text-charcoal-400">Current Challenges / Requirements</p>
                     <p className="text-sm text-charcoal-700 whitespace-pre-line">
                         {poc.challenges || poc.description || '-'}
                     </p>
                 </div>
             </div>
 
-            {/* Tech Stack */}
             {poc.techStack?.length > 0 && (
                 <div className="bg-white rounded-2xl border border-sand-200 p-6">
                     <h2 className="text-lg font-semibold text-charcoal-800 mb-3">Tech Stack</h2>
@@ -287,7 +349,6 @@ export default function PocDetail() {
                 </div>
             )}
 
-            {/* Links */}
             {(poc.demoLink || poc.repositoryLink || poc.repoLink) && (
                 <div className="bg-white rounded-2xl border border-sand-200 p-6">
                     <h2 className="text-lg font-semibold text-charcoal-800 mb-3">Links</h2>
@@ -343,8 +404,15 @@ export default function PocDetail() {
                                     key={voter._id || voter.id}
                                     className="flex items-center justify-between rounded-xl border border-sand-200 px-3 py-2"
                                 >
-                                    <span className="text-sm text-charcoal-700">{voter.name}</span>
-                                    <span className="text-xs text-charcoal-500">{voter.email}</span>
+                                    <div>
+                                        <span className="block text-sm text-charcoal-700">{voter.name}</span>
+                                        <span className="block text-xs text-charcoal-500">{voter.email}</span>
+                                    </div>
+                                    <span className="text-xs text-charcoal-500">
+                                        {voter.availabilityValue && voter.availabilityUnit
+                                            ? `${voter.availabilityValue} hours ${voter.availabilityUnit}`
+                                            : 'Availability not shared'}
+                                    </span>
                                 </div>
                             ))}
                         </div>
@@ -352,7 +420,55 @@ export default function PocDetail() {
                 </div>
             )}
 
-            <Modal isOpen={deleteModalOpen} onClose={closeDeleteModal} title="Delete Innovation Brief" size="sm">
+            <Modal isOpen={interestModalOpen} onClose={() => !voting && setInterestModalOpen(false)} title="Share Your Availability" size="sm">
+                <div className="space-y-4">
+                    <p className="text-sm text-charcoal-600">
+                        Tell the team how many hours you are free to work on <span className="font-semibold text-charcoal-800">{poc.title}</span>.
+                    </p>
+                    <div className="space-y-1.5">
+                        <label className="block text-sm font-medium text-charcoal-700">How many hours are you free?</label>
+                        <div className="flex gap-3">
+                            <Input
+                                type="number"
+                                min="1"
+                                placeholder="8"
+                                value={availabilityValue}
+                                onChange={(e) => setAvailabilityValue(e.target.value)}
+                                className="flex-1"
+                            />
+                            <select
+                                value={availabilityUnit}
+                                onChange={(e) => setAvailabilityUnit(e.target.value)}
+                                className="w-36 rounded-xl border border-sand-300 bg-white px-4 py-2.5 text-sm text-charcoal-800 focus:border-terracotta-400 focus:ring-2 focus:ring-terracotta-100 focus:outline-none transition-all duration-200"
+                            >
+                                {AVAILABILITY_UNITS.map((unit) => (
+                                    <option key={unit} value={unit}>{unit}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <p className="text-xs text-charcoal-500">Example: 8 hours per week</p>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                        <div>
+                            {poc.hasVoted && (
+                                <Button type="button" variant="outline" size="sm" disabled={voting} onClick={handleRemoveInterest}>
+                                    Remove Interest
+                                </Button>
+                            )}
+                        </div>
+                        <div className="flex gap-2">
+                        <Button type="button" variant="ghost" size="sm" disabled={voting} onClick={() => setInterestModalOpen(false)}>
+                            Cancel
+                        </Button>
+                        <Button type="button" size="sm" loading={voting} onClick={confirmInterest}>
+                            {poc.hasVoted ? 'Update Availability' : 'Mark Interested'}
+                        </Button>
+                        </div>
+                    </div>
+                </div>
+            </Modal>
+
+            <Modal isOpen={deleteModalOpen} onClose={closeDeleteModal} title="Delete Contribution Brief" size="sm">
                 <p className="text-sm text-charcoal-600">
                     Are you sure you want to delete <span className="font-semibold text-charcoal-800">{poc.title}</span>?
                     This action cannot be undone.

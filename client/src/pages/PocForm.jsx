@@ -6,6 +6,7 @@ import Input from '../components/ui/Input';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import Spinner from '../components/ui/Spinner';
+import { getAssignedAdminTrack } from '../utils/access';
 
 const TRACK_OPTIONS = [
     'Solutions',
@@ -14,6 +15,8 @@ const TRACK_OPTIONS = [
     'GTM/Sales',
     'Organizational Building & Thought Leadership',
 ];
+const IMPACT_OPTIONS = ['High', 'Medium', 'Low'];
+const ESTIMATED_DURATION_UNITS = ['days', 'weeks', 'months', 'years'];
 
 const getApiErrorMessage = (err, fallback) => {
     const data = err?.response?.data;
@@ -35,16 +38,22 @@ function StepChip({ label, active, done, onClick, icon }) {
                 onClick={onClick}
                 className={`h-14 w-14 rounded-full border-2 transition-all duration-200 flex items-center justify-center ${
                     active
-                        ? 'border-terracotta-400 bg-terracotta-500 text-white shadow-md ring-4 ring-terracotta-100'
+                        ? 'border-sky-300 bg-sky-100 text-sky-700 shadow-md ring-4 ring-sky-50'
                         : done
-                            ? 'border-terracotta-300 bg-terracotta-100 text-terracotta-600'
+                            ? 'border-blue-700 bg-blue-700 text-white shadow-md'
                             : 'border-sand-200 bg-sand-100 text-charcoal-400 hover:border-sand-300'
                 }`}
                 aria-label={label}
             >
                 {icon}
             </button>
-            <span className={`text-xs font-semibold ${active ? 'text-terracotta-600' : 'text-charcoal-500'}`}>{label}</span>
+            <span
+                className={`text-xs font-semibold ${
+                    done ? 'text-blue-700' : active ? 'text-sky-700' : 'text-charcoal-500'
+                }`}
+            >
+                {label}
+            </span>
         </div>
     );
 }
@@ -113,6 +122,8 @@ export default function PocForm() {
     const user = useAuthStore((s) => s.user);
     const isAdmin = user?.role === 'admin';
     const isViewer = user?.role === 'viewer';
+    const assignedAdminTrack = getAssignedAdminTrack(user);
+    const availableTrackOptions = assignedAdminTrack ? [assignedAdminTrack] : TRACK_OPTIONS;
 
     const [form, setForm] = useState({
         title: '',
@@ -122,6 +133,9 @@ export default function PocForm() {
         customerClassification: 'Existing',
         challenges: '',
         requestorName: '',
+        impact: 'Medium',
+        estimatedDurationValue: '',
+        estimatedDurationUnit: 'weeks',
         techStack: [],
         demoLink: '',
         repositoryLink: '',
@@ -153,6 +167,9 @@ export default function PocForm() {
                 customerClassification: poc.customerClassification || 'Existing',
                 challenges: poc.challenges || '',
                 requestorName: poc.requestorName || '',
+                impact: poc.impact || 'Medium',
+                estimatedDurationValue: poc.estimatedDurationValue ? String(poc.estimatedDurationValue) : '',
+                estimatedDurationUnit: poc.estimatedDurationUnit || 'weeks',
                 techStack: poc.techStack || [],
                 demoLink: poc.demoLink || '',
                 repositoryLink: poc.repositoryLink || poc.repoLink || '',
@@ -175,15 +192,26 @@ export default function PocForm() {
         }
     }, [isAdmin, user?.name, form.requestorName]);
 
+    useEffect(() => {
+        if (assignedAdminTrack && form.track !== assignedAdminTrack) {
+            setForm((prev) => ({ ...prev, track: assignedAdminTrack }));
+        }
+    }, [assignedAdminTrack, form.track]);
+
     const validateStep = (currentStep) => {
         const nextErrors = {};
         if (currentStep === 0) {
             if (!form.title.trim()) nextErrors.title = 'Project title is required';
             if (!form.customer.trim()) nextErrors.customer = 'Target audience/customer is required';
-            if (!form.track) nextErrors.track = 'Please select one innovation track';
+            if (!form.track) nextErrors.track = 'Please select one contribution track';
         }
         if (currentStep === 1 && !form.challenges.trim()) {
             nextErrors.challenges = 'Challenges & requirements are required';
+        }
+        if (currentStep === 1 && !form.estimatedDurationValue.trim()) {
+            nextErrors.estimatedDurationValue = 'Estimated completion time is required';
+        } else if (currentStep === 1 && (!/^\d+$/.test(form.estimatedDurationValue) || Number(form.estimatedDurationValue) <= 0)) {
+            nextErrors.estimatedDurationValue = 'Estimated completion time must be greater than zero';
         }
         if (!isViewer && currentStep === 2 && !form.status) {
             nextErrors.status = 'Please select draft or published';
@@ -192,14 +220,17 @@ export default function PocForm() {
         return Object.keys(nextErrors).length === 0;
     };
 
+    const addTag = () => {
+        const tag = tagInput.trim().replace(/,$/, '');
+        if (!tag || form.techStack.includes(tag)) return;
+        setForm((prev) => ({ ...prev, techStack: [...prev.techStack, tag] }));
+        setTagInput('');
+    };
+
     const handleAddTag = (e) => {
         if ((e.key === 'Enter' || e.key === ',') && tagInput.trim()) {
             e.preventDefault();
-            const tag = tagInput.trim().replace(/,$/, '');
-            if (tag && !form.techStack.includes(tag)) {
-                setForm((prev) => ({ ...prev, techStack: [...prev.techStack, tag] }));
-            }
-            setTagInput('');
+            addTag();
         }
     };
 
@@ -231,6 +262,9 @@ export default function PocForm() {
             customerClassification: 'Existing',
             challenges: '',
             requestorName: user?.name || '',
+            impact: 'Medium',
+            estimatedDurationValue: '',
+            estimatedDurationUnit: 'weeks',
             techStack: [],
             demoLink: '',
             repositoryLink: '',
@@ -259,6 +293,9 @@ export default function PocForm() {
                 challenges: form.challenges.trim(),
                 description: form.challenges.trim(),
                 requestorName: isAdmin ? undefined : (form.requestorName || user?.name || ''),
+                impact: form.impact,
+                estimatedDurationValue: form.estimatedDurationValue,
+                estimatedDurationUnit: form.estimatedDurationUnit,
                 techStack: form.techStack,
                 demoLink: form.demoLink,
                 repositoryLink: form.repositoryLink,
@@ -288,7 +325,7 @@ export default function PocForm() {
                 <Card hover={false} className="p-8 sm:p-10 text-center border-sand-200">
                     <p className="text-sm font-medium uppercase tracking-[0.2em] text-charcoal-500">Submit New Idea</p>
                     <h1 className="mt-3 text-3xl font-bold text-charcoal-800">Great Success!</h1>
-                    <p className="mt-3 text-charcoal-600">Your innovation brief has been submitted. The team will review it shortly.</p>
+                    <p className="mt-3 text-charcoal-600">Your contribution brief has been submitted. The team will review it shortly.</p>
                     <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center">
                         <Button type="button" onClick={resetForAnother}>Create Another Brief</Button>
                         <Button type="button" variant="outline" onClick={() => navigate('/dashboard')}>
@@ -303,7 +340,7 @@ export default function PocForm() {
     return (
         <div className="mx-auto max-w-5xl">
             <div className="mb-6 rounded-[28px] border border-sand-200 bg-linear-to-br from-white via-sand-50 to-terracotta-50 p-6 sm:p-8">
-                <p className="text-sm font-medium uppercase tracking-[0.2em] text-charcoal-500">Innovation Workspace</p>
+                <p className="text-sm font-medium uppercase tracking-[0.2em] text-charcoal-500">Contribution Workspace</p>
                 <h1 className="mt-2 text-3xl font-bold text-charcoal-800">{isEdit ? 'Edit Idea' : 'Submit New Idea'}</h1>
                 <p className="mt-1 text-charcoal-500">Transform your concept into a tangible Proof of Concept.</p>
                 <div className="mt-7 flex items-start justify-between relative">
@@ -357,9 +394,9 @@ export default function PocForm() {
                                 />
 
                                 <div className="space-y-2 md:col-span-2">
-                                    <label className="block text-sm font-medium text-charcoal-700">Innovation Track</label>
+                                    <label className="block text-sm font-medium text-charcoal-700">Contribution Track</label>
                                     <div className="grid gap-3 md:grid-cols-2">
-                                        {TRACK_OPTIONS.map((track) => (
+                                        {availableTrackOptions.map((track) => (
                                             <TrackOption
                                                 key={track}
                                                 label={track}
@@ -368,6 +405,11 @@ export default function PocForm() {
                                             />
                                         ))}
                                     </div>
+                                    {assignedAdminTrack && (
+                                        <p className="text-xs text-charcoal-500">
+                                            Your admin access is limited to the {assignedAdminTrack} track.
+                                        </p>
+                                    )}
                                     {errors.track && <p className="text-xs text-coral-500">{errors.track}</p>}
                                 </div>
 
@@ -428,15 +470,71 @@ export default function PocForm() {
                                             <span className="text-sm text-charcoal-400">React, FastAPI, MongoDB</span>
                                         )}
                                     </div>
-                                    <Input
-                                        placeholder="Type a tech and press Enter"
-                                        value={tagInput}
-                                        onChange={(e) => setTagInput(e.target.value)}
-                                        onKeyDown={handleAddTag}
-                                    />
+                                    <div className="flex gap-3">
+                                        <Input
+                                            className="flex-1"
+                                            placeholder="Type a tech and press Enter"
+                                            value={tagInput}
+                                            onChange={(e) => setTagInput(e.target.value)}
+                                            onKeyDown={handleAddTag}
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={addTag}
+                                            disabled={!tagInput.trim()}
+                                            className="h-[46px] w-[46px] shrink-0 grid place-items-center text-terracotta-600 hover:text-terracotta-700 disabled:text-sand-300 transition-colors"
+                                            aria-label="Add tech stack"
+                                        >
+                                            <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14m-7-7h14" />
+                                            </svg>
+                                        </button>
+                                    </div>
                                 </div>
 
                                 <div className="grid gap-5 md:grid-cols-2">
+                                    <div className="space-y-1.5">
+                                        <label className="block text-sm font-medium text-charcoal-700">Impact</label>
+                                        <select
+                                            value={form.impact}
+                                            onChange={(e) => setForm({ ...form, impact: e.target.value })}
+                                            className="w-full rounded-xl border border-sand-300 bg-white px-4 py-2.5 text-sm text-charcoal-800 focus:border-terracotta-400 focus:ring-2 focus:ring-terracotta-100 focus:outline-none transition-all duration-200"
+                                        >
+                                            {IMPACT_OPTIONS.map((option) => (
+                                                <option key={option} value={option}>{option}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                        <label className="block text-sm font-medium text-charcoal-700">Estimated Completion Time</label>
+                                        <div className="flex gap-3">
+                                            <Input
+                                                type="number"
+                                                min="1"
+                                                placeholder="2"
+                                                value={form.estimatedDurationValue}
+                                                onChange={(e) => setForm({ ...form, estimatedDurationValue: e.target.value })}
+                                                error={errors.estimatedDurationValue}
+                                                className="flex-1"
+                                            />
+                                            <select
+                                                value={form.estimatedDurationUnit}
+                                                onChange={(e) => setForm({ ...form, estimatedDurationUnit: e.target.value })}
+                                                className="w-36 rounded-xl border border-sand-300 bg-white px-4 py-2.5 text-sm text-charcoal-800 focus:border-terracotta-400 focus:ring-2 focus:ring-terracotta-100 focus:outline-none transition-all duration-200"
+                                            >
+                                                {ESTIMATED_DURATION_UNITS.map((unit) => (
+                                                    <option key={unit} value={unit}>{unit}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        {!errors.estimatedDurationValue && (
+                                            <p className="text-xs text-charcoal-500">
+                                                Example: `2 weeks` or `6 months`
+                                            </p>
+                                        )}
+                                    </div>
+
                                     <Input
                                         label="Demo Link"
                                         type="url"

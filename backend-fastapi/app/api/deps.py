@@ -7,9 +7,22 @@ from motor.motor_asyncio import AsyncIOMotorDatabase
 
 from app.core.database import get_db
 from app.core.security import TokenError, decode_access_token
+from app.core.config import settings
 from app.utils.serialization import serialize_doc
 
 security = HTTPBearer(auto_error=False)
+
+
+def is_super_admin_user(user: dict | None) -> bool:
+    if not user:
+        return False
+    return str(user.get("email", "")).strip().lower() == settings.super_admin_email.strip().lower()
+
+
+def get_admin_track(user: dict | None) -> str:
+    if not user or user.get("role") != "admin":
+        return ""
+    return str(user.get("adminTrack") or "").strip()
 
 
 async def get_current_user(
@@ -42,3 +55,9 @@ def require_roles(*roles: str) -> Callable:
         return current_user
 
     return role_dependency
+
+
+async def require_super_admin(current_user=Depends(get_current_user)):
+    if not is_super_admin_user(current_user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+    return current_user

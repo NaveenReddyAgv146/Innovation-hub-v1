@@ -5,7 +5,7 @@ from pymongo import MongoClient
 from app.core.config import settings
 from app.core.security import hash_password
 
-ADMIN_EMAIL = "admin@pocshowcase.com"
+ADMIN_EMAIL = "admin@agivant.com"
 ADMIN_PASSWORD = "admin123"
 ADMIN_NAME = "Admin"
 
@@ -24,6 +24,7 @@ def main() -> None:
                 "$set": {
                     "name": ADMIN_NAME,
                     "role": "admin",
+                    "adminTrack": None,
                     "password": hash_password(ADMIN_PASSWORD),
                     "updatedAt": now,
                 }
@@ -37,6 +38,7 @@ def main() -> None:
                 "email": ADMIN_EMAIL,
                 "password": hash_password(ADMIN_PASSWORD),
                 "role": "admin",
+                "adminTrack": None,
                 "refreshToken": None,
                 "createdAt": now,
                 "updatedAt": now,

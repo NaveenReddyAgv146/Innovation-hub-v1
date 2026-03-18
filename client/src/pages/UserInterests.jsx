@@ -1,12 +1,14 @@
 import { Fragment, useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { userService } from '../services/endpoints';
+import useAuthStore from '../store/authStore';
 import Card from '../components/ui/Card';
 import Input from '../components/ui/Input';
 import Badge from '../components/ui/Badge';
 import Spinner from '../components/ui/Spinner';
 import ErrorState from '../components/ui/ErrorState';
 import EmptyState from '../components/ui/EmptyState';
+import { getAssignedAdminTrack } from '../utils/access';
 
 const getProjectTitleWithTrack = (project = {}) =>
     project.track ? `${project.title} · ${project.track}` : project.title;
@@ -18,6 +20,8 @@ const formatDate = (value) => {
 };
 
 export default function UserInterests() {
+    const user = useAuthStore((s) => s.user);
+    const assignedAdminTrack = getAssignedAdminTrack(user);
     const [rows, setRows] = useState([]);
     const [search, setSearch] = useState('');
     const [loading, setLoading] = useState(true);
@@ -49,7 +53,9 @@ export default function UserInterests() {
             <div>
                 <h1 className="text-2xl font-bold text-charcoal-800">User Interests</h1>
                 <p className="text-charcoal-500 text-sm mt-0.5">
-                    Track which projects each user marked as interested.
+                    {assignedAdminTrack
+                        ? `Track which users are interested in ${assignedAdminTrack} contributions.`
+                        : 'Track which projects each user marked as interested.'}
                 </p>
             </div>
 
@@ -167,7 +173,11 @@ export default function UserInterests() {
                                                                         </Badge>
                                                                     </div>
                                                                     <div className="mt-2 flex items-center justify-between text-[11px] text-charcoal-500">
-                                                                        <span>{project.track || 'No track'}</span>
+                                                                        <span>
+                                                                            {project.availabilityValue && project.availabilityUnit
+                                                                                ? `${project.availabilityValue} hours ${project.availabilityUnit} available`
+                                                                                : project.track || 'No track'}
+                                                                        </span>
                                                                         <span>Updated {formatDate(project.updatedAt)}</span>
                                                                     </div>
                                                                 </Link>

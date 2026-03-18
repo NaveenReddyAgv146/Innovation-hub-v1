@@ -7,6 +7,8 @@ import Button from '../components/ui/Button';
 import Spinner from '../components/ui/Spinner';
 import EmptyState from '../components/ui/EmptyState';
 import ErrorState from '../components/ui/ErrorState';
+import useAuthStore from '../store/authStore';
+import { getAssignedAdminTrack } from '../utils/access';
 
 const getTitleWithTrack = (idea = {}) => (idea.track ? `${idea.title} · ${idea.track}` : idea.title);
 const TRACK_OPTIONS = [
@@ -19,10 +21,12 @@ const TRACK_OPTIONS = [
 ];
 
 export default function IdeaReviews() {
+    const user = useAuthStore((s) => s.user);
+    const assignedAdminTrack = getAssignedAdminTrack(user);
     const [ideas, setIdeas] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [trackFilter, setTrackFilter] = useState('all');
+    const [trackFilter, setTrackFilter] = useState(assignedAdminTrack || 'all');
     const [publishingId, setPublishingId] = useState('');
     const [publishToast, setPublishToast] = useState({ visible: false, title: '' });
     const publishToastTimerRef = useRef(null);
@@ -32,7 +36,8 @@ export default function IdeaReviews() {
         setError('');
         try {
             const params = { page: 1, limit: 50, status: 'draft' };
-            if (trackFilter !== 'all') params.track = trackFilter;
+            const effectiveTrack = assignedAdminTrack || trackFilter;
+            if (effectiveTrack !== 'all') params.track = effectiveTrack;
             const { data } = await pocService.getAll(params);
             setIdeas(data.pocs || []);
         } catch {
@@ -40,7 +45,13 @@ export default function IdeaReviews() {
         } finally {
             setLoading(false);
         }
-    }, [trackFilter]);
+    }, [assignedAdminTrack, trackFilter]);
+
+    useEffect(() => {
+        if (assignedAdminTrack && trackFilter !== assignedAdminTrack) {
+            setTrackFilter(assignedAdminTrack);
+        }
+    }, [assignedAdminTrack, trackFilter]);
 
     useEffect(() => {
         fetchIdeas();
@@ -92,7 +103,7 @@ export default function IdeaReviews() {
 
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div>
-                    <h1 className="text-2xl font-bold text-charcoal-800">Idea Reviews</h1>
+                    <h1 className="text-2xl font-bold text-charcoal-800">Contribution Reviews</h1>
                     <p className="text-charcoal-500 text-sm mt-0.5">
                         Review submitted ideas and publish approved ones for all users.
                     </p>
@@ -103,21 +114,29 @@ export default function IdeaReviews() {
             </div>
 
             <Card hover={false} className="p-4">
-                <div className="flex flex-wrap justify-center gap-2">
-                    {TRACK_OPTIONS.map((track) => (
-                        <button
-                            key={track.value}
-                            onClick={() => setTrackFilter(track.value)}
-                            className={`px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200
+                {assignedAdminTrack ? (
+                    <div className="text-center">
+                        <p className="text-sm font-medium text-charcoal-700">
+                            You can review and publish drafts only in the {assignedAdminTrack} track.
+                        </p>
+                    </div>
+                ) : (
+                    <div className="flex flex-wrap justify-center gap-2">
+                        {TRACK_OPTIONS.map((track) => (
+                            <button
+                                key={track.value}
+                                onClick={() => setTrackFilter(track.value)}
+                                className={`px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200
                   ${trackFilter === track.value
-                                    ? 'bg-terracotta-500 text-white shadow-sm'
-                                    : 'bg-sand-100 text-charcoal-600 hover:bg-sand-200'
-                                }`}
-                        >
-                            {track.label}
-                        </button>
-                    ))}
-                </div>
+                                        ? 'bg-terracotta-500 text-white shadow-sm'
+                                        : 'bg-sand-100 text-charcoal-600 hover:bg-sand-200'
+                                    }`}
+                            >
+                                {track.label}
+                            </button>
+                        ))}
+                    </div>
+                )}
             </Card>
 
             {loading ? (

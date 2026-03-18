@@ -8,13 +8,14 @@ import Spinner from '../components/ui/Spinner';
 import ErrorState from '../components/ui/ErrorState';
 import Button from '../components/ui/Button';
 import { getThumbnailGradient } from '../utils/thumbnailGradient';
-import { getSubadminTrack } from '../utils/subadminTrack';
+import { getAssignedAdminTrack } from '../utils/access';
+import { getTrackIconSrc } from '../utils/trackIcons';
 
 const getTitleWithTrack = (item = {}) => (item.track ? `${item.title} · ${item.track}` : item.title);
 
 export default function TrackDashboard() {
     const user = useAuthStore((s) => s.user);
-    const track = getSubadminTrack(user?.email);
+    const track = getAssignedAdminTrack(user);
 
     const [stats, setStats] = useState({ total: 0, published: 0, drafts: 0, finished: 0 });
     const [animatedPublishedPct, setAnimatedPublishedPct] = useState(0);
@@ -118,7 +119,7 @@ export default function TrackDashboard() {
     const draftDeg = Math.max(0, Math.min(360 - publishedDeg, animatedDraftPct * 3.6));
     const finishedStartDeg = publishedDeg + draftDeg;
     const ringStyle = {
-        background: `conic-gradient(var(--color-terracotta-500) 0deg ${publishedDeg}deg, var(--color-coral-500) ${publishedDeg}deg ${finishedStartDeg}deg, #16a34a ${finishedStartDeg}deg 360deg)`,
+        background: `conic-gradient(var(--color-terracotta-500) 0deg ${publishedDeg}deg, var(--color-amber-500) ${publishedDeg}deg ${finishedStartDeg}deg, #16a34a ${finishedStartDeg}deg 360deg)`,
     };
 
     const activePipelineItems = pipelineFilter
@@ -126,8 +127,8 @@ export default function TrackDashboard() {
         : [];
 
     const activePipelineTitle = pipelineFilter
-        ? `${pipelineFilter.status === 'published' ? 'Live' : pipelineFilter.status === 'draft' ? 'Draft' : 'Finished'} Innovations`
-        : 'Innovation Pipeline';
+        ? `${pipelineFilter.status === 'published' ? 'Live' : pipelineFilter.status === 'draft' ? 'Draft' : 'Finished'} Contributions`
+        : 'Contribution Pipeline';
 
     const detectSegment = (event) => {
         const rect = event.currentTarget.getBoundingClientRect();
@@ -159,23 +160,23 @@ export default function TrackDashboard() {
             <div className="rounded-3xl bg-gradient-to-br from-terracotta-900 via-terracotta-700 to-coral-600 p-6 sm:p-8 text-white shadow-lg">
                 <h1 className="text-2xl sm:text-3xl font-bold">{track} Track Dashboard</h1>
                 <p className="text-white/85 mt-1">
-                    Hello {user?.name?.split(' ')[0] || 'there'}, here is your track-specific innovation pulse.
+                    Hello {user?.name?.split(' ')[0] || 'there'}, here is your track-specific contribution pulse.
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mt-6">
                     <Link to={`/pocs?track=${encodeURIComponent(track)}&status=all`} className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors">
-                        <p className="text-xs uppercase tracking-wide text-white/75">Total Innovation Briefs</p>
+                        <p className="text-xs uppercase tracking-wide text-white/75">Total Contribution Briefs</p>
                         <p className="text-3xl font-bold mt-1">{stats.total}</p>
                     </Link>
                     <Link to={`/pocs?track=${encodeURIComponent(track)}&status=published`} className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors">
-                        <p className="text-xs uppercase tracking-wide text-white/75">Live Innovations</p>
+                        <p className="text-xs uppercase tracking-wide text-white/75">Live Contributions</p>
                         <p className="text-3xl font-bold mt-1">{stats.published}</p>
                     </Link>
                     <Link to={`/pocs?track=${encodeURIComponent(track)}&status=draft`} className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors">
-                        <p className="text-xs uppercase tracking-wide text-white/75">Draft Innovations</p>
+                        <p className="text-xs uppercase tracking-wide text-white/75">Draft Contributions</p>
                         <p className="text-3xl font-bold mt-1">{stats.drafts}</p>
                     </Link>
                     <Link to={`/pocs?track=${encodeURIComponent(track)}&status=finished`} className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors">
-                        <p className="text-xs uppercase tracking-wide text-white/75">Finished Innovations</p>
+                        <p className="text-xs uppercase tracking-wide text-white/75">Finished Contributions</p>
                         <p className="text-3xl font-bold mt-1">{stats.finished}</p>
                     </Link>
                 </div>
@@ -198,7 +199,7 @@ export default function TrackDashboard() {
                         </div>
                     </div>
                     <p className="text-sm text-charcoal-500 mt-4 text-center">
-                        {stats.published} live out of {stats.total} innovation briefs.
+                        {stats.published} live out of {stats.total} contribution briefs.
                     </p>
                     <div className="mt-3 flex items-center justify-center gap-4 text-xs">
                         <span className="inline-flex items-center gap-2 text-charcoal-600">
@@ -206,7 +207,7 @@ export default function TrackDashboard() {
                             Published
                         </span>
                         <span className="inline-flex items-center gap-2 text-charcoal-600">
-                            <span className="w-2.5 h-2.5 rounded-full bg-coral-500" />
+                            <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
                             Draft
                         </span>
                         <span className="inline-flex items-center gap-2 text-charcoal-600">
@@ -223,14 +224,14 @@ export default function TrackDashboard() {
                     onMouseEnter={schedulePipelineReset}
                 >
                     <h2 className="text-sm font-semibold text-charcoal-700 uppercase tracking-wide">
-                        {pipelineFilter ? activePipelineTitle : 'Innovation Pipeline'}
+                        {pipelineFilter ? activePipelineTitle : 'Contribution Pipeline'}
                     </h2>
 
                     {!pipelineFilter ? (
                         <div className="mt-5 space-y-4">
                             <div>
                                 <div className="flex items-center justify-between text-sm mb-1">
-                                    <span className="text-charcoal-600">Live Innovations</span>
+                                    <span className="text-charcoal-600">Live Contributions</span>
                                     <span className="font-semibold text-charcoal-800">{stats.published}</span>
                                 </div>
                                 <div className="h-3 rounded-full bg-sand-100 overflow-hidden">
@@ -242,19 +243,19 @@ export default function TrackDashboard() {
                             </div>
                             <div>
                                 <div className="flex items-center justify-between text-sm mb-1">
-                                    <span className="text-charcoal-600">Draft Innovations</span>
+                                    <span className="text-charcoal-600">Draft Contributions</span>
                                     <span className="font-semibold text-charcoal-800">{stats.drafts}</span>
                                 </div>
                                 <div className="h-3 rounded-full bg-sand-100 overflow-hidden">
                                     <div
-                                        className="h-full rounded-full bg-gradient-to-r from-coral-400 to-coral-600"
+                                        className="h-full rounded-full bg-gradient-to-r from-amber-400 to-amber-600"
                                         style={{ width: `${animatedDraftPct}%` }}
                                     />
                                 </div>
                             </div>
                             <div>
                                 <div className="flex items-center justify-between text-sm mb-1">
-                                    <span className="text-charcoal-600">Finished Innovations</span>
+                                    <span className="text-charcoal-600">Finished Contributions</span>
                                     <span className="font-semibold text-charcoal-800">{stats.finished}</span>
                                 </div>
                                 <div className="h-3 rounded-full bg-sand-100 overflow-hidden">
@@ -286,9 +287,17 @@ export default function TrackDashboard() {
                                             />
                                         ) : (
                                             <div className={`w-12 h-12 rounded-lg bg-gradient-to-br ${getThumbnailGradient(item._id || item.title)} flex items-center justify-center flex-shrink-0`}>
-                                                <svg className="w-5 h-5 text-white/85" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-                                                </svg>
+                                                {getTrackIconSrc(item.track) ? (
+                                                    <img
+                                                        src={getTrackIconSrc(item.track)}
+                                                        alt={`${item.track || 'Contribution'} icon`}
+                                                        className="w-6 h-6 object-contain brightness-0 invert"
+                                                    />
+                                                ) : (
+                                                    <svg className="w-5 h-5 text-white/85" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                                                    </svg>
+                                                )}
                                             </div>
                                         )}
                                         <div className="min-w-0 flex-1">
@@ -315,7 +324,7 @@ export default function TrackDashboard() {
 
             <div>
                 <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-semibold text-charcoal-800">Recent {track} Innovation Briefs</h2>
+                    <h2 className="text-lg font-semibold text-charcoal-800">Recent {track} Contribution Briefs</h2>
                     <Link to={`/pocs?track=${encodeURIComponent(track)}`}>
                         <Button variant="ghost" size="sm">View all</Button>
                     </Link>
@@ -323,12 +332,12 @@ export default function TrackDashboard() {
 
                 {recentPocs.length === 0 ? (
                     <Card hover={false} className="p-8 text-center">
-                        <p className="text-charcoal-500">No innovation briefs yet for this track.</p>
+                        <p className="text-charcoal-500">No contribution briefs yet for this track.</p>
                     </Card>
                 ) : (
-                    <div className="grid gap-4">
+                    <div className="grid grid-cols-1 gap-4">
                         {recentPocs.map((poc) => (
-                            <Link key={poc._id} to={`/pocs/${poc._id}`}>
+                            <Link key={poc._id} to={`/pocs/${poc._id}`} className="block">
                                 <Card className="p-4 flex items-center gap-4">
                                     {poc.thumbnail ? (
                                         <img
@@ -338,9 +347,17 @@ export default function TrackDashboard() {
                                         />
                                     ) : (
                                         <div className={`w-16 h-16 rounded-xl bg-gradient-to-br ${getThumbnailGradient(poc._id || poc.title)} flex items-center justify-center flex-shrink-0`}>
-                                            <svg className="w-6 h-6 text-white/85" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-                                            </svg>
+                                            {getTrackIconSrc(poc.track) ? (
+                                                <img
+                                                    src={getTrackIconSrc(poc.track)}
+                                                    alt={`${poc.track || 'Contribution'} icon`}
+                                                    className="w-8 h-8 object-contain brightness-0 invert"
+                                                />
+                                            ) : (
+                                                <svg className="w-6 h-6 text-white/85" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                                                </svg>
+                                            )}
                                         </div>
                                     )}
                                     <div className="flex-1 min-w-0">

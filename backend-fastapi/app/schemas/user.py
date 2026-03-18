@@ -6,6 +6,14 @@ from app.schemas.auth import normalize_employee_id, normalize_name_part, validat
 
 
 Role = Literal["admin", "developer", "viewer"]
+AdminScope = Literal["global", "track"]
+AdminTrack = Literal[
+    "Solutions",
+    "Delivery",
+    "Learning",
+    "GTM/Sales",
+    "Organizational Building & Thought Leadership",
+]
 
 
 class CreateUserRequest(BaseModel):
@@ -15,6 +23,8 @@ class CreateUserRequest(BaseModel):
     password: str = Field(min_length=6)
     role: Role = "viewer"
     employeeId: str | None = Field(default=None, max_length=100)
+    adminScope: AdminScope | None = None
+    adminTrack: AdminTrack | None = None
 
     @field_validator("firstName")
     @classmethod
@@ -39,9 +49,11 @@ class CreateUserRequest(BaseModel):
         return normalize_employee_id(value)
 
     @model_validator(mode="after")
-    def validate_employee_id_for_viewer(self):
+    def validate_user_configuration(self):
         if self.role == "viewer" and not self.employeeId:
             raise ValueError("Employee ID is required for viewer users")
+        if self.role == "admin" and self.adminScope == "track" and not self.adminTrack:
+            raise ValueError("Admin track is required for track admins")
         return self
 
 
@@ -52,6 +64,8 @@ class UpdateUserRequest(BaseModel):
     password: str | None = Field(default=None, min_length=6)
     role: Role | None = None
     employeeId: str | None = Field(default=None, max_length=100)
+    adminScope: AdminScope | None = None
+    adminTrack: AdminTrack | None = None
 
     @field_validator("firstName")
     @classmethod

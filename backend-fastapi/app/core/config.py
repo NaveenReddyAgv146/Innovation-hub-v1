@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     app_name: str = "POC FastAPI Backend"
     app_env: str = "development"
     port: int = 8000
+    super_admin_email: str = "admin@agivant.com"
 
     mongodb_uri: str = "mongodb+srv://Vercel-Admin-atlas-poc-naveen:gPmYtUWszk8Kbn6Z@atlas-poc-naveen.zlh8xmx.mongodb.net/?appName=atlas-poc-naveen" #"mongodb+srv://naveenreddyagivant_db_user:yV98OqyzC8QxmYcW@poc-cluster1.urn3zga.mongodb.net/" #ac-lufgkvi-shard-00-02.urn3zga.mongodb.net:27017
     mongodb_db_name: str = "poc_showcase"
