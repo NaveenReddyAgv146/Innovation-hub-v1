@@ -35,6 +35,9 @@ export default function Layout({ children }) {
 
     if (user?.role === 'viewer') {
         navItems.push({ path: '/pocs?interested=true', label: 'Interested', icon: StarIcon });
+        navItems.push({ path: '/pocs?involved=true', label: 'Involved Contributions', icon: ScopeIcon });
+        navItems.push({ path: '/pocs?pocContact=true', label: 'POC Contributions', icon: UsersIcon });
+        navItems.push({ path: '/my-credits', label: 'My Credits', icon: TrophyIcon });
     }
 
     if (user?.role === 'admin' || user?.role === 'developer') {
@@ -44,6 +47,7 @@ export default function Layout({ children }) {
     if (user?.role === 'admin') {
         navItems.push({ path: '/admin/idea-reviews', label: 'Contribution Reviews', icon: ReviewIcon });
         navItems.push({ path: '/admin/user-interests', label: 'User Interests', icon: StarIcon });
+        navItems.push({ path: '/admin/leaderboard', label: 'Leaderboard', icon: TrophyIcon });
     }
 
     if (isSuperAdmin(user)) {
@@ -57,9 +61,17 @@ export default function Layout({ children }) {
     const isInterestedRoute =
         location.pathname === '/pocs' &&
         new URLSearchParams(location.search).get('interested') === 'true';
+    const isInvolvedRoute =
+        location.pathname === '/pocs' &&
+        new URLSearchParams(location.search).get('involved') === 'true';
+    const isPocContactRoute =
+        location.pathname === '/pocs' &&
+        new URLSearchParams(location.search).get('pocContact') === 'true';
     const isActive = (path) => {
         if (path === '/pocs?interested=true') return isInterestedRoute;
-        if (path === '/pocs') return (location.pathname === '/pocs' || location.pathname.startsWith('/pocs/')) && !isInterestedRoute;
+        if (path === '/pocs?involved=true') return isInvolvedRoute;
+        if (path === '/pocs?pocContact=true') return isPocContactRoute;
+        if (path === '/pocs') return (location.pathname === '/pocs' || location.pathname.startsWith('/pocs/')) && !isInterestedRoute && !isInvolvedRoute && !isPocContactRoute;
         return location.pathname === path || (path !== '/dashboard' && location.pathname.startsWith(path) && path !== '/pocs/new');
     };
     const isDark = theme === 'dark';
@@ -236,6 +248,14 @@ function ScopeIcon({ active }) {
     return (
         <svg className={`w-5 h-5 ${active ? 'text-terracotta-500' : 'text-charcoal-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M4 12a8 8 0 1016 0 8 8 0 10-16 0m8-6v2m0 8v2m6-6h-2M8 12H6m6 0h.01" />
+        </svg>
+    );
+}
+
+function TrophyIcon({ active }) {
+    return (
+        <svg className={`w-5 h-5 ${active ? 'text-terracotta-500' : 'text-charcoal-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8 21h8m-4-4v4m5-14V5a1 1 0 00-1-1H8a1 1 0 00-1 1v3m10 0a3 3 0 003-3V5h-3m0 3a5 5 0 11-10 0V5H4v0a3 3 0 003 3" />
         </svg>
     );
 }

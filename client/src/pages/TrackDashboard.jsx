@@ -17,10 +17,12 @@ export default function TrackDashboard() {
     const user = useAuthStore((s) => s.user);
     const track = getAssignedAdminTrack(user);
 
-    const [stats, setStats] = useState({ total: 0, published: 0, drafts: 0, finished: 0 });
+    const [stats, setStats] = useState({ total: 0, published: 0, live: 0, drafts: 0, finished: 0, cancelled: 0 });
     const [animatedPublishedPct, setAnimatedPublishedPct] = useState(0);
+    const [animatedLivePct, setAnimatedLivePct] = useState(0);
     const [animatedDraftPct, setAnimatedDraftPct] = useState(0);
     const [animatedFinishedPct, setAnimatedFinishedPct] = useState(0);
+    const [animatedCancelledPct, setAnimatedCancelledPct] = useState(0);
     const [recentPocs, setRecentPocs] = useState([]);
     const [allPocs, setAllPocs] = useState([]);
     const [pipelineFilter, setPipelineFilter] = useState(null);
@@ -52,10 +54,12 @@ export default function TrackDashboard() {
             }
 
             const published = all.filter((p) => p.status === 'published').length;
+            const live = all.filter((p) => p.status === 'live').length;
             const drafts = all.filter((p) => p.status === 'draft').length;
             const finished = all.filter((p) => p.status === 'finished').length;
+            const cancelled = all.filter((p) => p.status === 'cancelled').length;
 
-            setStats({ total, published, drafts, finished });
+            setStats({ total, published, live, drafts, finished, cancelled });
             setRecentPocs(pocs);
             setAllPocs(all);
         } catch {
@@ -75,12 +79,16 @@ export default function TrackDashboard() {
 
     useEffect(() => {
         const targetPublished = stats.total ? (stats.published / stats.total) * 100 : 0;
+        const targetLive = stats.total ? (stats.live / stats.total) * 100 : 0;
         const targetDraft = stats.total ? (stats.drafts / stats.total) * 100 : 0;
         const targetFinished = stats.total ? (stats.finished / stats.total) * 100 : 0;
+        const targetCancelled = stats.total ? (stats.cancelled / stats.total) * 100 : 0;
 
         const startPublished = animatedPublishedPct;
+        const startLive = animatedLivePct;
         const startDraft = animatedDraftPct;
         const startFinished = animatedFinishedPct;
+        const startCancelled = animatedCancelledPct;
         const duration = 1000;
         const start = performance.now();
 
@@ -88,8 +96,10 @@ export default function TrackDashboard() {
             const progress = Math.min((now - start) / duration, 1);
             const eased = 1 - (1 - progress) ** 3;
             setAnimatedPublishedPct(startPublished + (targetPublished - startPublished) * eased);
+            setAnimatedLivePct(startLive + (targetLive - startLive) * eased);
             setAnimatedDraftPct(startDraft + (targetDraft - startDraft) * eased);
             setAnimatedFinishedPct(startFinished + (targetFinished - startFinished) * eased);
+            setAnimatedCancelledPct(startCancelled + (targetCancelled - startCancelled) * eased);
             if (progress < 1) {
                 animationFrameRef.current = requestAnimationFrame(tick);
             }
@@ -101,7 +111,7 @@ export default function TrackDashboard() {
         return () => {
             if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
         };
-    }, [stats.total, stats.published, stats.drafts, stats.finished]);
+    }, [stats.total, stats.published, stats.live, stats.drafts, stats.finished, stats.cancelled]);
 
     if (loading) return <Spinner size="lg" className="mt-24" />;
     if (error) return <ErrorState message={error} onRetry={fetchDashboard} />;
@@ -116,18 +126,21 @@ export default function TrackDashboard() {
     }
 
     const publishedDeg = Math.max(0, Math.min(360, animatedPublishedPct * 3.6));
-    const draftDeg = Math.max(0, Math.min(360 - publishedDeg, animatedDraftPct * 3.6));
-    const finishedStartDeg = publishedDeg + draftDeg;
+    const liveDeg = Math.max(0, Math.min(360 - publishedDeg, animatedLivePct * 3.6));
+    const draftDeg = Math.max(0, Math.min(360 - publishedDeg - liveDeg, animatedDraftPct * 3.6));
+    const finishedStartDeg = publishedDeg + liveDeg + draftDeg;
     const ringStyle = {
-        background: `conic-gradient(var(--color-terracotta-500) 0deg ${publishedDeg}deg, var(--color-amber-500) ${publishedDeg}deg ${finishedStartDeg}deg, #16a34a ${finishedStartDeg}deg 360deg)`,
+        background: `conic-gradient(#7c3aed 0deg ${publishedDeg}deg, var(--color-terracotta-500) ${publishedDeg}deg ${publishedDeg + liveDeg}deg, var(--color-amber-500) ${publishedDeg + liveDeg}deg ${finishedStartDeg}deg, #16a34a ${finishedStartDeg}deg 360deg)`,
     };
 
     const activePipelineItems = pipelineFilter
-        ? allPocs.filter((poc) => (pipelineFilter.status ? poc.status === pipelineFilter.status : true))
+        ? allPocs.filter((poc) =>
+            pipelineFilter.status ? poc.status === pipelineFilter.status : true
+        )
         : [];
 
     const activePipelineTitle = pipelineFilter
-        ? `${pipelineFilter.status === 'published' ? 'Live' : pipelineFilter.status === 'draft' ? 'Draft' : 'Finished'} Contributions`
+        ? `${pipelineFilter.status.charAt(0).toUpperCase() + pipelineFilter.status.slice(1)} Contributions`
         : 'Contribution Pipeline';
 
     const detectSegment = (event) => {
@@ -137,7 +150,8 @@ export default function TrackDashboard() {
         const angleFromTop = (Math.atan2(y, x) * 180) / Math.PI + 90;
         const normalized = (angleFromTop + 360) % 360;
         if (normalized <= publishedDeg) return 'published';
-        if (normalized <= publishedDeg + draftDeg) return 'draft';
+        if (normalized <= publishedDeg + liveDeg) return 'live';
+        if (normalized <= publishedDeg + liveDeg + draftDeg) return 'draft';
         return 'finished';
     };
 
@@ -162,14 +176,18 @@ export default function TrackDashboard() {
                 <p className="text-white/85 mt-1">
                     Hello {user?.name?.split(' ')[0] || 'there'}, here is your track-specific contribution pulse.
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mt-6">
+                <div className="grid grid-cols-1 sm:grid-cols-6 gap-4 mt-6">
                     <Link to={`/pocs?track=${encodeURIComponent(track)}&status=all`} className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors">
-                        <p className="text-xs uppercase tracking-wide text-white/75">Total Contribution Briefs</p>
+                        <p className="text-xs uppercase tracking-wide text-white/75">Total Contributions{/*  */}</p>
                         <p className="text-3xl font-bold mt-1">{stats.total}</p>
                     </Link>
                     <Link to={`/pocs?track=${encodeURIComponent(track)}&status=published`} className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors">
-                        <p className="text-xs uppercase tracking-wide text-white/75">Live Contributions</p>
+                        <p className="text-xs uppercase tracking-wide text-white/75">Published Contributions</p>
                         <p className="text-3xl font-bold mt-1">{stats.published}</p>
+                    </Link>
+                    <Link to={`/pocs?track=${encodeURIComponent(track)}&status=live`} className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors">
+                        <p className="text-xs uppercase tracking-wide text-white/75">Live Contributions</p>
+                        <p className="text-3xl font-bold mt-1">{stats.live}</p>
                     </Link>
                     <Link to={`/pocs?track=${encodeURIComponent(track)}&status=draft`} className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors">
                         <p className="text-xs uppercase tracking-wide text-white/75">Draft Contributions</p>
@@ -178,6 +196,10 @@ export default function TrackDashboard() {
                     <Link to={`/pocs?track=${encodeURIComponent(track)}&status=finished`} className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors">
                         <p className="text-xs uppercase tracking-wide text-white/75">Finished Contributions</p>
                         <p className="text-3xl font-bold mt-1">{stats.finished}</p>
+                    </Link>
+                    <Link to={`/pocs?track=${encodeURIComponent(track)}&status=cancelled`} className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors">
+                        <p className="text-xs uppercase tracking-wide text-white/75">Cancelled Contributions</p>
+                        <p className="text-3xl font-bold mt-1">{stats.cancelled}</p>
                     </Link>
                 </div>
             </div>
@@ -193,18 +215,22 @@ export default function TrackDashboard() {
                             title="Click segment to filter pipeline"
                         >
                             <div className="w-full h-full rounded-full bg-white flex flex-col items-center justify-center">
-                                <p className="text-3xl font-bold text-charcoal-800">{Math.round(animatedPublishedPct)}%</p>
-                                <p className="text-xs text-charcoal-500">Published</p>
+                                <p className="text-3xl font-bold text-charcoal-800">{Math.round(animatedLivePct)}%</p>
+                                <p className="text-xs text-charcoal-500">Live</p>
                             </div>
                         </div>
                     </div>
                     <p className="text-sm text-charcoal-500 mt-4 text-center">
-                        {stats.published} live out of {stats.total} contribution briefs.
+                        {stats.live} live out of {stats.total} contribution briefs.
                     </p>
                     <div className="mt-3 flex items-center justify-center gap-4 text-xs">
                         <span className="inline-flex items-center gap-2 text-charcoal-600">
-                            <span className="w-2.5 h-2.5 rounded-full bg-terracotta-500" />
+                            <span className="w-2.5 h-2.5 rounded-full bg-violet-600" />
                             Published
+                        </span>
+                        <span className="inline-flex items-center gap-2 text-charcoal-600">
+                            <span className="w-2.5 h-2.5 rounded-full bg-terracotta-500" />
+                            Live
                         </span>
                         <span className="inline-flex items-center gap-2 text-charcoal-600">
                             <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
@@ -231,13 +257,25 @@ export default function TrackDashboard() {
                         <div className="mt-5 space-y-4">
                             <div>
                                 <div className="flex items-center justify-between text-sm mb-1">
-                                    <span className="text-charcoal-600">Live Contributions</span>
+                                    <span className="text-charcoal-600">Published Contributions</span>
                                     <span className="font-semibold text-charcoal-800">{stats.published}</span>
                                 </div>
                                 <div className="h-3 rounded-full bg-sand-100 overflow-hidden">
                                     <div
-                                        className="h-full rounded-full bg-gradient-to-r from-terracotta-500 to-terracotta-700"
+                                        className="h-full rounded-full bg-violet-600"
                                         style={{ width: `${animatedPublishedPct}%` }}
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <div className="flex items-center justify-between text-sm mb-1">
+                                    <span className="text-charcoal-600">Live Contributions</span>
+                                    <span className="font-semibold text-charcoal-800">{stats.live}</span>
+                                </div>
+                                <div className="h-3 rounded-full bg-sand-100 overflow-hidden">
+                                    <div
+                                        className="h-full rounded-full bg-gradient-to-r from-terracotta-500 to-terracotta-700"
+                                        style={{ width: `${animatedLivePct}%` }}
                                     />
                                 </div>
                             </div>
@@ -262,6 +300,18 @@ export default function TrackDashboard() {
                                     <div
                                         className="h-full rounded-full bg-green-600"
                                         style={{ width: `${animatedFinishedPct}%` }}
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <div className="flex items-center justify-between text-sm mb-1">
+                                    <span className="text-charcoal-600">Cancelled Contributions</span>
+                                    <span className="font-semibold text-charcoal-800">{stats.cancelled}</span>
+                                </div>
+                                <div className="h-3 rounded-full bg-sand-100 overflow-hidden">
+                                    <div
+                                        className="h-full rounded-full bg-red-600"
+                                        style={{ width: `${animatedCancelledPct}%` }}
                                     />
                                 </div>
                             </div>
@@ -303,7 +353,7 @@ export default function TrackDashboard() {
                                         <div className="min-w-0 flex-1">
                                             <div className="flex items-center justify-between gap-2">
                                                 <p className="text-sm font-semibold text-charcoal-800 truncate">{getTitleWithTrack(item)}</p>
-                                                <Badge color={item.status === 'published' ? 'green' : item.status === 'finished' ? 'green' : 'amber'}>
+                                                <Badge color={item.status === 'published' || item.status === 'live' || item.status === 'finished' ? 'green' : 'amber'}>
                                                     {item.status}
                                                 </Badge>
                                             </div>
@@ -364,7 +414,7 @@ export default function TrackDashboard() {
                                         <h3 className="font-semibold text-charcoal-800 truncate">{getTitleWithTrack(poc)}</h3>
                                         <p className="text-sm text-charcoal-500 truncate">{poc.description}</p>
                                         <div className="flex items-center gap-2 mt-1.5">
-                                            <Badge color={poc.status === 'published' ? 'green' : poc.status === 'finished' ? 'green' : 'amber'}>
+                                            <Badge color={poc.status === 'published' || poc.status === 'live' || poc.status === 'finished' ? 'green' : 'amber'}>
                                                 {poc.status}
                                             </Badge>
                                             {poc.techStack?.slice(0, 3).map((t) => (

@@ -38,6 +38,7 @@ async def register(payload: RegisterRequest, db: AsyncIOMotorDatabase = Depends(
         "employeeId": payload.employeeId.strip(),
         "password": hash_password(payload.password),
         "role": "viewer",
+        "contributionCredits": 0,
         "refreshToken": None,
         "createdAt": now,
         "updatedAt": now,

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { pocService } from '../services/endpoints';
+import { pocService, userService } from '../services/endpoints';
 import useAuthStore from '../store/authStore';
 import Input from '../components/ui/Input';
 import Button from '../components/ui/Button';
@@ -136,6 +136,7 @@ export default function PocForm() {
         impact: 'Medium',
         estimatedDurationValue: '',
         estimatedDurationUnit: 'weeks',
+        liveAt: '',
         techStack: [],
         demoLink: '',
         repositoryLink: '',
@@ -146,8 +147,11 @@ export default function PocForm() {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [fetching, setFetching] = useState(isEdit);
+    const [contactSuggestions, setContactSuggestions] = useState([]);
+    const [showContactSuggestions, setShowContactSuggestions] = useState(false);
     const [step, setStep] = useState(0);
     const [isSuccess, setIsSuccess] = useState(false);
+    const [originalStatus, setOriginalStatus] = useState('');
 
     const steps = useMemo(
         () => (isViewer ? ['Core Details', 'Problem & Build'] : ['Core Details', 'Problem & Build', 'Status']),
@@ -159,6 +163,9 @@ export default function PocForm() {
         try {
             const { data } = await pocService.getById(id);
             const poc = data.poc;
+            const fetchedStatus = poc.status || '';
+            const editableStatus = fetchedStatus === 'draft' ? 'draft' : 'published';
+            setOriginalStatus(fetchedStatus);
             setForm({
                 title: poc.title || '',
                 customer: poc.customer || '',
@@ -170,10 +177,11 @@ export default function PocForm() {
                 impact: poc.impact || 'Medium',
                 estimatedDurationValue: poc.estimatedDurationValue ? String(poc.estimatedDurationValue) : '',
                 estimatedDurationUnit: poc.estimatedDurationUnit || 'weeks',
+                liveAt: poc.liveAt ? String(poc.liveAt).slice(0, 16) : '',
                 techStack: poc.techStack || [],
                 demoLink: poc.demoLink || '',
                 repositoryLink: poc.repositoryLink || poc.repoLink || '',
-                status: poc.status || '',
+                status: editableStatus,
             });
         } catch {
             setError('Failed to load POC');
@@ -197,6 +205,30 @@ export default function PocForm() {
             setForm((prev) => ({ ...prev, track: assignedAdminTrack }));
         }
     }, [assignedAdminTrack, form.track]);
+
+    useEffect(() => {
+        const canSuggestContacts = user?.role === 'admin' || user?.role === 'developer';
+        const query = form.pointOfContact.trim();
+        if (!canSuggestContacts || query.length < 1) {
+            setContactSuggestions([]);
+            setShowContactSuggestions(false);
+            return;
+        }
+
+        const timer = setTimeout(async () => {
+            try {
+                const { data } = await userService.getDirectory({ search: query, limit: 8 });
+                const users = data?.users || [];
+                setContactSuggestions(users);
+                setShowContactSuggestions(users.length > 0);
+            } catch {
+                setContactSuggestions([]);
+                setShowContactSuggestions(false);
+            }
+        }, 200);
+
+        return () => clearTimeout(timer);
+    }, [form.pointOfContact, user?.role]);
 
     const validateStep = (currentStep) => {
         const nextErrors = {};
@@ -265,6 +297,7 @@ export default function PocForm() {
             impact: 'Medium',
             estimatedDurationValue: '',
             estimatedDurationUnit: 'weeks',
+            liveAt: '',
             techStack: [],
             demoLink: '',
             repositoryLink: '',
@@ -278,7 +311,7 @@ export default function PocForm() {
     };
 
     const handleSubmit = async (e) => {
-        e.preventDefault();
+        if (e?.preventDefault) e.preventDefault();
         if (!validateStep(step)) return;
         setError('');
         setLoading(true);
@@ -296,6 +329,7 @@ export default function PocForm() {
                 impact: form.impact,
                 estimatedDurationValue: form.estimatedDurationValue,
                 estimatedDurationUnit: form.estimatedDurationUnit,
+                liveAt: undefined,
                 techStack: form.techStack,
                 demoLink: form.demoLink,
                 repositoryLink: form.repositoryLink,
@@ -365,7 +399,7 @@ export default function PocForm() {
                     </div>
                 )}
 
-                <form onSubmit={handleSubmit} className="space-y-4">
+                <form onSubmit={(e) => e.preventDefault()} className="space-y-4">
                     {step === 0 && (
                         <Card hover={false} className="p-5 sm:p-6 border border-sand-200 shadow-none">
                             <div className="mb-5">
@@ -413,13 +447,44 @@ export default function PocForm() {
                                     {errors.track && <p className="text-xs text-coral-500">{errors.track}</p>}
                                 </div>
 
-                                <Input
-                                    label="Point of Contact (Optional)"
-                                    placeholder="Name or email"
-                                    value={form.pointOfContact}
-                                    onChange={(e) => setForm({ ...form, pointOfContact: e.target.value })}
-                                    className="md:col-span-2"
-                                />
+                                <div className="md:col-span-2 space-y-1.5 relative">
+                                    <label className="block text-sm font-medium text-charcoal-700">
+                                        Point of Contact (Optional)
+                                    </label>
+                                    <input
+                                        className="w-full rounded-xl border border-sand-300 bg-white px-4 py-2.5 text-sm text-charcoal-800 placeholder:text-charcoal-400 transition-all duration-200 hover:border-sand-400 focus:border-terracotta-400 focus:ring-2 focus:ring-terracotta-100 focus:outline-none"
+                                        placeholder="Type name or email (e.g., ys for Yash)"
+                                        value={form.pointOfContact}
+                                        onChange={(e) => setForm({ ...form, pointOfContact: e.target.value })}
+                                        onFocus={() => {
+                                            if (contactSuggestions.length > 0) setShowContactSuggestions(true);
+                                        }}
+                                        onBlur={() => {
+                                            setTimeout(() => setShowContactSuggestions(false), 120);
+                                        }}
+                                    />
+                                    {showContactSuggestions && contactSuggestions.length > 0 && (
+                                        <div className="absolute z-20 top-[72px] w-full rounded-xl border border-sand-200 bg-white shadow-lg overflow-hidden">
+                                            {contactSuggestions.map((item) => (
+                                                <button
+                                                    key={item._id || item.id || item.email}
+                                                    type="button"
+                                                    onMouseDown={(e) => e.preventDefault()}
+                                                    onClick={() => {
+                                                        setForm((prev) => ({ ...prev, pointOfContact: item.email || item.name || '' }));
+                                                        setShowContactSuggestions(false);
+                                                    }}
+                                                    className="w-full px-4 py-2.5 text-left hover:bg-sand-50 border-b border-sand-100 last:border-b-0"
+                                                >
+                                                    <p className="text-sm font-medium text-charcoal-800 truncate">{item.name || '-'}</p>
+                                                    <p className="text-xs text-charcoal-500 truncate">
+                                                        {item.email || '-'}{item.role === 'admin' && item.adminTrack ? ` · ${item.adminTrack} admin` : ''}
+                                                    </p>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </Card>
                     )}
@@ -577,10 +642,15 @@ export default function PocForm() {
                                     value="published"
                                     checked={form.status === 'published'}
                                     onChange={(e) => setForm({ ...form, status: e.target.value })}
-                                    description="Share this idea with the full team now."
+                                    description="Share this idea. Then use Make Live action when work actually starts."
                                     accent="published"
                                 />
                             </div>
+                            {isEdit && originalStatus && (
+                                <p className="mt-3 text-xs text-charcoal-500">
+                                    Current status: <span className="font-semibold capitalize">{originalStatus}</span>
+                                </p>
+                            )}
                             {errors.status && <p className="mt-3 text-xs text-coral-500">{errors.status}</p>}
                         </Card>
                     )}
@@ -597,7 +667,7 @@ export default function PocForm() {
                                 Next Steps
                             </Button>
                         ) : (
-                            <Button type="submit" loading={loading}>
+                            <Button type="button" loading={loading} onClick={handleSubmit}>
                                 {isEdit ? 'Update POC' : 'Submit POC'}
                             </Button>
                         )}

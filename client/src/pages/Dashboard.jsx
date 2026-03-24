@@ -1,5 +1,5 @@
 ﻿import { useState, useEffect, useCallback, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/authStore';
 import { pocService } from '../services/endpoints';
 import Card from '../components/ui/Card';
@@ -20,15 +20,17 @@ const TRACKS = [
 ];
 const buildEmptyTrackStats = () =>
     TRACKS.reduce((acc, track) => {
-        acc[track.key] = { published: 0, draft: 0, finished: 0, total: 0 };
+        acc[track.key] = { published: 0, live: 0, draft: 0, finished: 0, cancelled: 0, total: 0 };
         return acc;
     }, {});
 
 export default function Dashboard() {
     const user = useAuthStore((s) => s.user);
+    const navigate = useNavigate();
     const isViewer = user?.role === 'viewer';
-    const [stats, setStats] = useState({ total: 0, published: 0, drafts: 0, finished: 0, interested: 0 });
+    const [stats, setStats] = useState({ total: 0, published: 0, live: 0, drafts: 0, finished: 0, cancelled: 0, interested: 0 });
     const [animatedPublishedPct, setAnimatedPublishedPct] = useState(0);
+    const [animatedLivePct, setAnimatedLivePct] = useState(0);
     const [animatedDraftPct, setAnimatedDraftPct] = useState(0);
     const [animatedFinishedPct, setAnimatedFinishedPct] = useState(0);
     const [animatedInterestedPct, setAnimatedInterestedPct] = useState(0);
@@ -62,23 +64,29 @@ export default function Dashboard() {
 
             const computedTrackStats = buildEmptyTrackStats();
             let published = 0;
+            let live = 0;
             let draft = 0;
             let finished = 0;
+            let cancelled = 0;
             let interested = 0;
             allTrackPocs.forEach((poc) => {
                 if (poc.status === 'published') published += 1;
+                if (poc.status === 'live') live += 1;
                 if (poc.status === 'draft') draft += 1;
                 if (poc.status === 'finished') finished += 1;
+                if (poc.status === 'cancelled') cancelled += 1;
                 if (poc.hasVoted) interested += 1;
                 const bucket = computedTrackStats[poc.track];
                 if (!bucket) return;
                 bucket.total += 1;
                 if (poc.status === 'published') bucket.published += 1;
+                else if (poc.status === 'live') bucket.live += 1;
                 else if (poc.status === 'draft') bucket.draft += 1;
                 else if (poc.status === 'finished') bucket.finished += 1;
+                else if (poc.status === 'cancelled') bucket.cancelled += 1;
             });
 
-            setStats({ total, published, drafts: draft, finished, interested });
+            setStats({ total, published, live, drafts: draft, finished, cancelled, interested });
             setRecentPocs(pocs);
             setTrackStats(computedTrackStats);
             setAllPocs(allTrackPocs);
@@ -99,10 +107,12 @@ export default function Dashboard() {
 
     useEffect(() => {
         const targetPublished = stats.total ? (stats.published / stats.total) * 100 : 0;
+        const targetLive = stats.total ? (stats.live / stats.total) * 100 : 0;
         const targetDraft = stats.total ? (stats.drafts / stats.total) * 100 : 0;
         const targetFinished = stats.total ? (stats.finished / stats.total) * 100 : 0;
         const targetInterested = stats.total ? (stats.interested / stats.total) * 100 : 0;
         const startPublished = animatedPublishedPct;
+        const startLive = animatedLivePct;
         const startDraft = animatedDraftPct;
         const startFinished = animatedFinishedPct;
         const startInterested = animatedInterestedPct;
@@ -113,6 +123,7 @@ export default function Dashboard() {
             const progress = Math.min((now - start) / duration, 1);
             const eased = 1 - (1 - progress) ** 3;
             setAnimatedPublishedPct(startPublished + (targetPublished - startPublished) * eased);
+            setAnimatedLivePct(startLive + (targetLive - startLive) * eased);
             setAnimatedDraftPct(startDraft + (targetDraft - startDraft) * eased);
             setAnimatedFinishedPct(startFinished + (targetFinished - startFinished) * eased);
             setAnimatedInterestedPct(startInterested + (targetInterested - startInterested) * eased);
@@ -127,22 +138,35 @@ export default function Dashboard() {
         return () => {
             if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
         };
-    }, [stats.total, stats.published, stats.drafts, stats.finished, stats.interested]);
+    }, [stats.total, stats.published, stats.live, stats.drafts, stats.finished, stats.interested]);
 
     if (loading) return <Spinner size="lg" className="mt-24" />;
     if (error) return <ErrorState message={error} onRetry={fetchDashboard} />;
 
-    const publishRate = Math.round(animatedPublishedPct);
+    const liveRate = Math.round(animatedLivePct);
+    const viewerInterestedPocs = allPocs.filter((poc) => poc.hasVoted);
+    const viewerInterestedPublished = viewerInterestedPocs.filter((poc) => poc.status === 'published').length;
+    const viewerInterestedLive = viewerInterestedPocs.filter((poc) => poc.status === 'live').length;
+    const viewerInterestedFinished = viewerInterestedPocs.filter((poc) => poc.status === 'finished').length;
+    const viewerInterestedTotal = viewerInterestedPublished + viewerInterestedLive + viewerInterestedFinished;
+    const viewerPublishedPct = viewerInterestedTotal ? Math.round((viewerInterestedPublished / viewerInterestedTotal) * 100) : 0;
+    const viewerLivePct = viewerInterestedTotal ? Math.round((viewerInterestedLive / viewerInterestedTotal) * 100) : 0;
+    const viewerFinishedPct = viewerInterestedTotal ? Math.round((viewerInterestedFinished / viewerInterestedTotal) * 100) : 0;
     const draftShare = stats.total ? Math.round((stats.drafts / stats.total) * 100) : 0;
-    const activeCompletionRate = stats.published + stats.finished
-        ? Math.round((stats.finished / (stats.published + stats.finished)) * 100)
-        : 0;
-    const liveShare = stats.total ? Math.round((stats.published / stats.total) * 100) : 0;
+    const publishedShare = stats.total ? Math.round((stats.published / stats.total) * 100) : 0;
+    const liveShare = stats.total ? Math.round((stats.live / stats.total) * 100) : 0;
     const finishedShare = stats.total ? Math.round((stats.finished / stats.total) * 100) : 0;
-    const interestedShare = stats.total ? Math.round((stats.interested / stats.total) * 100) : 0;
+    const cancelledShare = stats.total ? Math.round((stats.cancelled / stats.total) * 100) : 0;
+    const displayedPublishedCount = isViewer ? viewerInterestedPublished : stats.published;
+    const displayedLiveCount = isViewer ? viewerInterestedLive : stats.live;
+    const displayedFinishedCount = isViewer ? viewerInterestedFinished : stats.finished;
+    const displayedPublishedPct = isViewer ? viewerPublishedPct : animatedPublishedPct;
+    const displayedLivePct = isViewer ? viewerLivePct : animatedLivePct;
+    const displayedFinishedPct = isViewer ? viewerFinishedPct : animatedFinishedPct;
     const publishedDeg = Math.max(0, Math.min(360, animatedPublishedPct * 3.6));
-    const draftDeg = isViewer ? 0 : Math.max(0, Math.min(360 - publishedDeg, animatedDraftPct * 3.6));
-    const finishedStartDeg = publishedDeg + draftDeg;
+    const liveDeg = isViewer ? 0 : Math.max(0, Math.min(360 - publishedDeg, animatedLivePct * 3.6));
+    const draftDeg = isViewer ? 0 : Math.max(0, Math.min(360 - publishedDeg - liveDeg, animatedDraftPct * 3.6));
+    const finishedStartDeg = publishedDeg + liveDeg + draftDeg;
     const viewerTrackSegments = [];
     let cumulativeTrackDeg = 0;
     if (isViewer) {
@@ -165,11 +189,11 @@ export default function Dashboard() {
     const ringStyle = {
         background: isViewer
             ? `conic-gradient(${viewerTrackSegments.map((segment) => `${segment.color} ${segment.start}deg ${segment.end}deg`).join(', ') || '#e2e8f0 0deg 360deg'})`
-            : `conic-gradient(var(--color-terracotta-500) 0deg ${publishedDeg}deg, var(--color-amber-500) ${publishedDeg}deg ${finishedStartDeg}deg, #16a34a ${finishedStartDeg}deg 360deg)`,
+            : `conic-gradient(#7c3aed 0deg ${publishedDeg}deg, var(--color-terracotta-500) ${publishedDeg}deg ${publishedDeg + liveDeg}deg, var(--color-amber-500) ${publishedDeg + liveDeg}deg ${finishedStartDeg}deg, #16a34a ${finishedStartDeg}deg 360deg)`,
     };
 
     const activePipelineItems = pipelineFilter
-        ? allPocs.filter((poc) => {
+        ? (isViewer ? allPocs.filter((poc) => poc.hasVoted) : allPocs).filter((poc) => {
             const interestedMatch = pipelineFilter.interested ? poc.hasVoted : true;
             const statusMatch = pipelineFilter.status ? poc.status === pipelineFilter.status : true;
             const trackMatch = pipelineFilter.track ? poc.track === pipelineFilter.track : true;
@@ -178,8 +202,8 @@ export default function Dashboard() {
         : [];
     const activeTrackLabel = TRACKS.find((item) => item.key === pipelineFilter?.track)?.label;
     const activePipelineTitle = pipelineFilter
-        ? `${pipelineFilter.interested ? 'Interested' : pipelineFilter.status ? (pipelineFilter.status === 'published' ? 'Live' : pipelineFilter.status === 'draft' ? 'Draft' : 'Finished') : ''}${activeTrackLabel ? `${pipelineFilter.status || pipelineFilter.interested ? ' · ' : ''}${activeTrackLabel}` : ''} Contributions`
-        : 'Contribution Pipeline';
+        ? `${isViewer ? 'My ' : ''}${pipelineFilter.interested ? 'Interested' : pipelineFilter.status ? (pipelineFilter.status.charAt(0).toUpperCase() + pipelineFilter.status.slice(1)) : ''}${activeTrackLabel ? `${pipelineFilter.status || pipelineFilter.interested ? ' · ' : ''}${activeTrackLabel}` : ''} Contributions`
+        : isViewer ? 'My Contribution Pipeline' : 'Contribution Pipeline';
 
     const detectSegment = (event) => {
         const rect = event.currentTarget.getBoundingClientRect();
@@ -192,7 +216,8 @@ export default function Dashboard() {
             return clickedTrack || TRACKS[TRACKS.length - 1].key;
         }
         if (normalized <= publishedDeg) return 'published';
-        if (!isViewer && normalized <= publishedDeg + draftDeg) return 'draft';
+        if (!isViewer && normalized <= publishedDeg + liveDeg) return 'live';
+        if (!isViewer && normalized <= publishedDeg + liveDeg + draftDeg) return 'draft';
         return 'finished';
     };
 
@@ -214,6 +239,13 @@ export default function Dashboard() {
         schedulePipelineReset(true);
     };
 
+    const goToInvolvedContributions = (status = '') => {
+        const params = new URLSearchParams();
+        params.set('involved', 'true');
+        if (status) params.set('status', status);
+        navigate(`/pocs?${params.toString()}`);
+    };
+
     return (
         <div className="space-y-8">
             {!isViewer && (
@@ -222,22 +254,30 @@ export default function Dashboard() {
                 <p className="text-white/85 mt-1">
                     Hello {user?.name?.split(' ')[0] || 'there'}, here is your contribution pulse.
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mt-6">
-                    <Link to="/pocs?status=all" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors">
-                        <p className="text-xs uppercase tracking-wide text-white/75">Total Contribution Briefs</p>
-                        <p className="text-3xl font-bold mt-1">{stats.total}</p>
+                <div className="grid grid-cols-1 sm:grid-cols-6 gap-4 mt-6">
+                    <Link to="/pocs?status=all" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[104px] flex flex-col">
+                        <p className="text-xs uppercase tracking-wide text-white/75 leading-tight min-h-[2.5rem]">Total Contributions</p>
+                        <p className="text-3xl font-bold mt-auto leading-none">{stats.total}</p>
                     </Link>
-                    <Link to="/pocs?status=published" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors">
-                        <p className="text-xs uppercase tracking-wide text-white/75">Live Contributions</p>
-                        <p className="text-3xl font-bold mt-1">{stats.published}</p>
+                    <Link to="/pocs?status=published" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[104px] flex flex-col">
+                        <p className="text-xs uppercase tracking-wide text-white/75 leading-tight min-h-[2.5rem]">Published Contributions</p>
+                        <p className="text-3xl font-bold mt-auto leading-none">{stats.published}</p>
                     </Link>
-                    <Link to="/pocs?status=draft" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors">
-                        <p className="text-xs uppercase tracking-wide text-white/75">Draft Contributions</p>
-                        <p className="text-3xl font-bold mt-1">{stats.drafts}</p>
+                    <Link to="/pocs?status=live" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[104px] flex flex-col">
+                        <p className="text-xs uppercase tracking-wide text-white/75 leading-tight min-h-[2.5rem]">Live Contributions</p>
+                        <p className="text-3xl font-bold mt-auto leading-none">{stats.live}</p>
                     </Link>
-                    <Link to="/pocs?status=finished" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors">
-                        <p className="text-xs uppercase tracking-wide text-white/75">Finished Contributions</p>
-                        <p className="text-3xl font-bold mt-1">{stats.finished}</p>
+                    <Link to="/pocs?status=draft" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[104px] flex flex-col">
+                        <p className="text-xs uppercase tracking-wide text-white/75 leading-tight min-h-[2.5rem]">Draft Contributions</p>
+                        <p className="text-3xl font-bold mt-auto leading-none">{stats.drafts}</p>
+                    </Link>
+                    <Link to="/pocs?status=finished" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[104px] flex flex-col">
+                        <p className="text-xs uppercase tracking-wide text-white/75 leading-tight min-h-[2.5rem]">Finished Contributions</p>
+                        <p className="text-3xl font-bold mt-auto leading-none">{stats.finished}</p>
+                    </Link>
+                    <Link to="/pocs?status=cancelled" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[104px] flex flex-col">
+                        <p className="text-xs uppercase tracking-wide text-white/75 leading-tight min-h-[2.5rem]">Cancelled Contributions</p>
+                        <p className="text-3xl font-bold mt-auto leading-none">{stats.cancelled}</p>
                     </Link>
                 </div>
             </div>
@@ -247,20 +287,26 @@ export default function Dashboard() {
                 <div className="mb-4">
                     <h2 className="text-lg font-semibold text-charcoal-800">Track Overview</h2>
                     <p className="text-sm text-charcoal-500">
-                        {isViewer ? 'Live and finished contribution counts by track.' : 'Live, draft, and finished contribution counts by track.'}
+                        {isViewer ? 'Published, live, and finished contribution counts by track.' : 'Published, live, draft, finished, and cancelled contribution counts by track.'}
                     </p>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
                     {TRACKS.map((track) => {
-                        const statsForTrack = trackStats[track.key] || { published: 0, draft: 0, finished: 0, total: 0 };
+                        const statsForTrack = trackStats[track.key] || { published: 0, live: 0, draft: 0, finished: 0, cancelled: 0, total: 0 };
                         const publishedPct = statsForTrack.total
                             ? Math.round((statsForTrack.published / statsForTrack.total) * 100)
+                            : 0;
+                        const livePct = statsForTrack.total
+                            ? Math.round((statsForTrack.live / statsForTrack.total) * 100)
                             : 0;
                         const draftPct = statsForTrack.total
                             ? Math.round((statsForTrack.draft / statsForTrack.total) * 100)
                             : 0;
                         const finishedPct = statsForTrack.total
                             ? Math.round((statsForTrack.finished / statsForTrack.total) * 100)
+                            : 0;
+                        const cancelledPct = statsForTrack.total
+                            ? Math.round((statsForTrack.cancelled / statsForTrack.total) * 100)
                             : 0;
 
                         return (
@@ -286,15 +332,35 @@ export default function Dashboard() {
                                                 schedulePipelineReset(true);
                                             }}
                                             className="w-full flex items-center justify-between text-xs rounded-md px-1 py-0.5 hover:bg-sand-100 transition-colors"
-                                            title={`Show live ${track.label} contributions in pipeline`}
+                                            title={`Show published ${track.label} contributions in pipeline`}
                                         >
-                                            <span className="text-charcoal-600">Live</span>
+                                            <span className="text-charcoal-600">Published</span>
                                             <span className="font-medium text-charcoal-700">{statsForTrack.published}</span>
                                         </button>
                                         <div className="h-2 rounded-full bg-sand-100 overflow-hidden">
                                             <div
-                                                className="h-full rounded-full bg-gradient-to-r from-terracotta-500 to-terracotta-700"
+                                                className="h-full rounded-full bg-violet-600"
                                                 style={{ width: `${publishedPct}%` }}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setPipelineFilter({ status: 'live', track: track.key });
+                                                schedulePipelineReset(true);
+                                            }}
+                                            className="w-full flex items-center justify-between text-xs rounded-md px-1 py-0.5 hover:bg-sand-100 transition-colors"
+                                            title={`Show live ${track.label} contributions in pipeline`}
+                                        >
+                                            <span className="text-charcoal-600">Live</span>
+                                            <span className="font-medium text-charcoal-700">{statsForTrack.live}</span>
+                                        </button>
+                                        <div className="h-2 rounded-full bg-sand-100 overflow-hidden">
+                                            <div
+                                                className="h-full rounded-full bg-gradient-to-r from-terracotta-500 to-terracotta-700"
+                                                style={{ width: `${livePct}%` }}
                                             />
                                         </div>
                                     </div>
@@ -340,6 +406,28 @@ export default function Dashboard() {
                                             />
                                         </div>
                                     </div>
+                                    {!isViewer && (
+                                    <div className="space-y-1">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setPipelineFilter({ status: 'cancelled', track: track.key });
+                                                schedulePipelineReset(true);
+                                            }}
+                                            className="w-full flex items-center justify-between text-xs rounded-md px-1 py-0.5 hover:bg-sand-100 transition-colors"
+                                            title={`Show cancelled ${track.label} contributions in pipeline`}
+                                        >
+                                            <span className="text-charcoal-600">Cancelled</span>
+                                            <span className="font-medium text-charcoal-700">{statsForTrack.cancelled}</span>
+                                        </button>
+                                        <div className="h-2 rounded-full bg-sand-100 overflow-hidden">
+                                            <div
+                                                className="h-full rounded-full bg-red-600"
+                                                style={{ width: `${cancelledPct}%` }}
+                                            />
+                                        </div>
+                                    </div>
+                                    )}
                                 </div>
                             </Card>
                         );
@@ -358,15 +446,15 @@ export default function Dashboard() {
                             title={isViewer ? 'Click a track segment to filter pipeline' : 'Click segment to filter pipeline'}
                         >
                             <div className="w-full h-full rounded-full bg-white flex flex-col items-center justify-center">
-                                <p className="text-3xl font-bold text-charcoal-800">{isViewer ? stats.total : publishRate}{isViewer ? '' : '%'}</p>
-                                <p className="text-xs text-charcoal-500">{isViewer ? 'Contributions' : 'Published'}</p>
+                                <p className="text-3xl font-bold text-charcoal-800">{isViewer ? stats.total : liveRate}{isViewer ? '' : '%'}</p>
+                                <p className="text-xs text-charcoal-500">{isViewer ? 'Contributions' : 'Live'}</p>
                             </div>
                         </div>
                     </div>
                     <p className="text-sm text-charcoal-500 mt-4 text-center">
                         {isViewer
                             ? `Track distribution across ${stats.total} contribution briefs.`
-                            : `${stats.published} live out of ${stats.total} contribution briefs.`}
+                            : `${stats.live} live out of ${stats.total} contribution briefs.`}
                     </p>
                     <div className="mt-3 flex items-center justify-center gap-4 text-xs">
                         {isViewer ? (
@@ -381,8 +469,12 @@ export default function Dashboard() {
                         ) : (
                             <>
                                 <span className="inline-flex items-center gap-2 text-charcoal-600">
-                                    <span className="w-2.5 h-2.5 rounded-full bg-terracotta-500" />
+                                    <span className="w-2.5 h-2.5 rounded-full bg-violet-600" />
                                     Published
+                                </span>
+                                <span className="inline-flex items-center gap-2 text-charcoal-600">
+                                    <span className="w-2.5 h-2.5 rounded-full bg-terracotta-500" />
+                                    Live
                                 </span>
                                 <span className="inline-flex items-center gap-2 text-charcoal-600">
                                     <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
@@ -403,21 +495,68 @@ export default function Dashboard() {
                     onMouseMove={schedulePipelineReset}
                     onMouseEnter={schedulePipelineReset}
                 >
-                    <h2 className="text-sm font-semibold text-charcoal-700 uppercase tracking-wide">
-                        {pipelineFilter ? activePipelineTitle : 'Contribution Pipeline'}
-                    </h2>
+                    <div className="flex items-center justify-between gap-3">
+                        <h2 className="text-sm font-semibold text-charcoal-700 uppercase tracking-wide">
+                            {pipelineFilter ? activePipelineTitle : (isViewer ? 'My Contribution Pipeline' : 'Contribution Pipeline')}
+                        </h2>
+                        {isViewer && !pipelineFilter && (
+                            <Button type="button" size="sm" variant="ghost" onClick={() => goToInvolvedContributions()}>
+                                View All
+                            </Button>
+                        )}
+                    </div>
 
                     {!pipelineFilter ? (
                         <div className="mt-5 space-y-4">
                             <div>
-                                <div className="flex items-center justify-between text-sm mb-1">
+                                <div className="text-sm mb-1">
+                                {isViewer ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => goToInvolvedContributions('published')}
+                                        className="w-full flex items-center justify-between rounded-md px-1 py-0.5 text-left hover:bg-sand-100 transition-colors"
+                                        title="Open involved published contributions"
+                                    >
+                                        <span className="text-charcoal-600">Published Contributions</span>
+                                        <span className="font-semibold text-charcoal-800">{displayedPublishedCount}</span>
+                                    </button>
+                                ) : (
+                                    <div className="w-full flex items-center justify-between">
+                                    <span className="text-charcoal-600">Published Contributions</span>
+                                    <span className="font-semibold text-charcoal-800">{displayedPublishedCount}</span>
+                                    </div>
+                                )}
+                                </div>
+                                <div className="h-3 rounded-full bg-sand-100 overflow-hidden">
+                                    <div
+                                        className="h-full rounded-full bg-violet-600"
+                                        style={{ width: `${displayedPublishedPct}%` }}
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <div className="text-sm mb-1">
+                                {isViewer ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => goToInvolvedContributions('live')}
+                                        className="w-full flex items-center justify-between rounded-md px-1 py-0.5 text-left hover:bg-sand-100 transition-colors"
+                                        title="Open involved live contributions"
+                                    >
+                                        <span className="text-charcoal-600">Live Contributions</span>
+                                        <span className="font-semibold text-charcoal-800">{displayedLiveCount}</span>
+                                    </button>
+                                ) : (
+                                    <div className="w-full flex items-center justify-between">
                                     <span className="text-charcoal-600">Live Contributions</span>
-                                    <span className="font-semibold text-charcoal-800">{stats.published}</span>
+                                    <span className="font-semibold text-charcoal-800">{displayedLiveCount}</span>
+                                    </div>
+                                )}
                                 </div>
                                 <div className="h-3 rounded-full bg-sand-100 overflow-hidden">
                                     <div
                                         className="h-full rounded-full bg-gradient-to-r from-terracotta-500 to-terracotta-700"
-                                        style={{ width: `${animatedPublishedPct}%` }}
+                                        style={{ width: `${displayedLivePct}%` }}
                                     />
                                 </div>
                             </div>
@@ -436,68 +575,85 @@ export default function Dashboard() {
                             </div>
                             )}
                             <div>
-                                <div className="flex items-center justify-between text-sm mb-1">
+                                <div className="text-sm mb-1">
+                                {isViewer ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => goToInvolvedContributions('finished')}
+                                        className="w-full flex items-center justify-between rounded-md px-1 py-0.5 text-left hover:bg-sand-100 transition-colors"
+                                        title="Open involved finished contributions"
+                                    >
+                                        <span className="text-charcoal-600">Finished Contributions</span>
+                                        <span className="font-semibold text-charcoal-800">{displayedFinishedCount}</span>
+                                    </button>
+                                ) : (
+                                    <div className="w-full flex items-center justify-between">
                                     <span className="text-charcoal-600">Finished Contributions</span>
-                                    <span className="font-semibold text-charcoal-800">{stats.finished}</span>
+                                    <span className="font-semibold text-charcoal-800">{displayedFinishedCount}</span>
+                                    </div>
+                                )}
                                 </div>
                                 <div className="h-3 rounded-full bg-sand-100 overflow-hidden">
                                     <div
                                         className="h-full rounded-full bg-green-600"
-                                        style={{ width: `${animatedFinishedPct}%` }}
+                                        style={{ width: `${displayedFinishedPct}%` }}
                                     />
                                 </div>
                             </div>
-                            {isViewer && (
-                                <div>
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            setPipelineFilter({ interested: true });
-                                            schedulePipelineReset(true);
-                                        }}
-                                        className="w-full flex items-center justify-between text-sm mb-1 rounded-md px-1 py-0.5 hover:bg-sand-100 transition-colors"
-                                        title="Show contributions you marked as interested"
-                                    >
-                                        <span className="text-charcoal-600">Interested Contributions</span>
-                                        <span className="font-semibold text-charcoal-800">{stats.interested}</span>
-                                    </button>
-                                    <div className="h-3 rounded-full bg-sand-100 overflow-hidden">
-                                        <div
-                                            className="h-full rounded-full bg-yellow-500"
-                                            style={{ width: `${animatedInterestedPct}%` }}
-                                        />
-                                    </div>
+                            {!isViewer && (
+                            <div>
+                                <div className="flex items-center justify-between text-sm mb-1">
+                                    <span className="text-charcoal-600">Cancelled Contributions</span>
+                                    <span className="font-semibold text-charcoal-800">{stats.cancelled}</span>
                                 </div>
+                                <div className="h-3 rounded-full bg-sand-100 overflow-hidden">
+                                    <div
+                                        className="h-full rounded-full bg-red-600"
+                                        style={{ width: `${cancelledShare}%` }}
+                                    />
+                                </div>
+                            </div>
                             )}
                             <div className="border-t border-sand-200 pt-3">
-                                <div className={`grid gap-2.5 ${isViewer ? 'grid-cols-1 md:grid-cols-3' : 'grid-cols-1 sm:grid-cols-3'}`}>
-                                    {!isViewer && (
-                                        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
-                                            <p className="text-[11px] uppercase tracking-wide text-amber-700">Draft Share</p>
-                                            <p className="mt-1 text-lg font-semibold text-amber-700">{draftShare}%</p>
-                                        </div>
-                                    )}
-                                    <div className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2.5">
-                                        <p className="text-[11px] uppercase tracking-wide text-blue-700">
-                                            {isViewer ? 'Live Share' : 'Live Completion'}
-                                        </p>
-                                        <p className="mt-1 text-lg font-semibold text-blue-700">
-                                            {isViewer ? `${liveShare}%` : `${activeCompletionRate}%`}
-                                        </p>
-                                    </div>
-                                    <div className="rounded-xl border border-green-200 bg-green-50 px-3 py-2.5">
-                                        <p className="text-[11px] uppercase tracking-wide text-green-700">
-                                            {isViewer ? 'Finished Share' : 'Finished Throughput'}
-                                        </p>
-                                        <p className="mt-1 text-lg font-semibold text-green-700">
-                                            {isViewer ? `${finishedShare}%` : stats.finished}
-                                        </p>
-                                    </div>
-                                    {isViewer && (
-                                        <div className="rounded-xl border border-yellow-200 bg-yellow-50 px-3 py-2.5">
-                                            <p className="text-[11px] uppercase tracking-wide text-yellow-700">Interested Share</p>
-                                            <p className="mt-1 text-lg font-semibold text-yellow-700">{interestedShare}%</p>
-                                        </div>
+                                <div className={`grid grid-cols-1 sm:grid-cols-2 ${isViewer ? 'xl:grid-cols-3' : 'xl:grid-cols-5'} gap-2.5`}>
+                                    {isViewer ? (
+                                        <>
+                                            <div className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2.5">
+                                                <p className="text-[11px] uppercase tracking-wide text-violet-700">Published Share</p>
+                                                <p className="mt-1 text-lg font-semibold text-violet-700">{viewerPublishedPct}%</p>
+                                            </div>
+                                            <div className="rounded-xl border border-orange-200 bg-orange-50 px-3 py-2.5">
+                                                <p className="text-[11px] uppercase tracking-wide text-orange-700">Live Share</p>
+                                                <p className="mt-1 text-lg font-semibold text-orange-700">{viewerLivePct}%</p>
+                                            </div>
+                                            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5">
+                                                <p className="text-[11px] uppercase tracking-wide text-emerald-700">Finished Share</p>
+                                                <p className="mt-1 text-lg font-semibold text-emerald-700">{viewerFinishedPct}%</p>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
+                                                <p className="text-[11px] uppercase tracking-wide text-amber-700">Draft Share</p>
+                                                <p className="mt-1 text-lg font-semibold text-amber-700">{draftShare}%</p>
+                                            </div>
+                                            <div className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2.5">
+                                                <p className="text-[11px] uppercase tracking-wide text-violet-700">Published Share</p>
+                                                <p className="mt-1 text-lg font-semibold text-violet-700">{publishedShare}%</p>
+                                            </div>
+                                            <div className="rounded-xl border border-orange-200 bg-orange-50 px-3 py-2.5">
+                                                <p className="text-[11px] uppercase tracking-wide text-orange-700">Live Share</p>
+                                                <p className="mt-1 text-lg font-semibold text-orange-700">{liveShare}%</p>
+                                            </div>
+                                            <div className="rounded-xl border border-green-200 bg-green-50 px-3 py-2.5">
+                                                <p className="text-[11px] uppercase tracking-wide text-green-700">Finished Share</p>
+                                                <p className="mt-1 text-lg font-semibold text-green-700">{finishedShare}%</p>
+                                            </div>
+                                            <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2.5">
+                                                <p className="text-[11px] uppercase tracking-wide text-red-700">Cancelled Share</p>
+                                                <p className="mt-1 text-lg font-semibold text-red-700">{cancelledShare}%</p>
+                                            </div>
+                                        </>
                                     )}
                                 </div>
                             </div>
@@ -539,7 +695,7 @@ export default function Dashboard() {
                                         <div className="min-w-0 flex-1">
                                             <div className="flex items-center justify-between gap-2">
                                                 <p className="text-sm font-semibold text-charcoal-800 truncate">{getTitleWithTrack(item)}</p>
-                                                <Badge color={item.status === 'published' ? 'green' : item.status === 'finished' ? 'green' : 'amber'}>
+                                                <Badge color={item.status === 'published' || item.status === 'live' || item.status === 'finished' ? 'green' : 'amber'}>
                                                     {item.status}
                                                 </Badge>
                                             </div>
@@ -605,7 +761,7 @@ export default function Dashboard() {
                                         <h3 className="font-semibold text-charcoal-800 truncate">{getTitleWithTrack(poc)}</h3>
                                         <p className="text-sm text-charcoal-500 truncate">{poc.description}</p>
                                         <div className="flex items-center gap-2 mt-1.5">
-                                            <Badge color={poc.status === 'published' ? 'green' : poc.status === 'finished' ? 'green' : 'amber'}>
+                                            <Badge color={poc.status === 'published' || poc.status === 'live' || poc.status === 'finished' ? 'green' : 'amber'}>
                                                 {poc.status}
                                             </Badge>
                                             {poc.techStack?.slice(0, 3).map((t) => (

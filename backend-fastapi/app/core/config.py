@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     jwt_refresh_secret: str = "change_this_refresh_secret"
     jwt_access_expiry_minutes: int = 15
     jwt_refresh_expiry_days: int = 7
+    power_automate_live_webhook_url: str = ""
 
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",

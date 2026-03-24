@@ -11,6 +11,14 @@ from app.core.config import settings
 from app.utils.serialization import serialize_doc
 
 security = HTTPBearer(auto_error=False)
+LEGACY_TRACK_ADMIN_EMAILS = {
+    "delivery.admin@agivant.com": "Delivery",
+    "sales.admin@agivant.com": "GTM/Sales",
+    "learning.admin@agivant.com": "Learning",
+    "solution.admin@agivant.com": "Solutions",
+    "solutionadmin@agivant.com": "Solutions",
+    "leadership.admin@agivant.com": "Organizational Building & Thought Leadership",
+}
 
 
 def is_super_admin_user(user: dict | None) -> bool:
@@ -22,7 +30,11 @@ def is_super_admin_user(user: dict | None) -> bool:
 def get_admin_track(user: dict | None) -> str:
     if not user or user.get("role") != "admin":
         return ""
-    return str(user.get("adminTrack") or "").strip()
+    direct = str(user.get("adminTrack") or "").strip()
+    if direct:
+        return direct
+    email = str(user.get("email") or "").strip().lower()
+    return LEGACY_TRACK_ADMIN_EMAILS.get(email, "")
 
 
 async def get_current_user(

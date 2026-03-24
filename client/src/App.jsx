@@ -17,6 +17,8 @@ const PocForm = lazy(() => import('./pages/PocForm'));
 const UserManagement = lazy(() => import('./pages/UserManagement'));
 const IdeaReviews = lazy(() => import('./pages/IdeaReviews'));
 const UserInterests = lazy(() => import('./pages/UserInterests'));
+const Leaderboard = lazy(() => import('./pages/Leaderboard'));
+const MyCredits = lazy(() => import('./pages/MyCredits'));
 const THEME_STORAGE_KEY = 'poc_theme';
 
 function PageLoader() {
@@ -141,11 +143,33 @@ export default function App() {
           />
 
           <Route
+            path="/admin/leaderboard"
+            element={
+              <AppLayout>
+                <RoleRoute roles={['admin']}>
+                  <Leaderboard />
+                </RoleRoute>
+              </AppLayout>
+            }
+          />
+
+          <Route
             path="/admin/user-interests"
             element={
               <AppLayout>
                 <RoleRoute roles={['admin']}>
                   <UserInterests />
+                </RoleRoute>
+              </AppLayout>
+            }
+          />
+
+          <Route
+            path="/my-credits"
+            element={
+              <AppLayout>
+                <RoleRoute roles={['viewer']}>
+                  <MyCredits />
                 </RoleRoute>
               </AppLayout>
             }

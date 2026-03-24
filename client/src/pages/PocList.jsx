@@ -13,9 +13,10 @@ import Pagination from '../components/ui/Pagination';
 import Modal from '../components/ui/Modal';
 import { getThumbnailGradient } from '../utils/thumbnailGradient';
 import { getTrackIconSrc } from '../utils/trackIcons';
+import { getAssignedAdminTrack, isSuperAdmin } from '../utils/access';
 
-const STATUS_OPTIONS = ['all', 'published', 'draft', 'finished'];
-const VIEWER_STATUS_OPTIONS = ['published', 'finished'];
+const STATUS_OPTIONS = ['all', 'published', 'live', 'draft', 'finished', 'cancelled'];
+const VIEWER_STATUS_OPTIONS = ['published', 'live', 'finished'];
 const IMPACT_OPTIONS = ['all', 'High', 'Medium', 'Low'];
 const AVAILABILITY_UNITS = ['per day', 'per week'];
 const TRACK_OPTIONS = [
@@ -34,17 +35,26 @@ const getTitleWithTrack = (poc = {}) => (poc.track ? `${poc.title} · ${poc.trac
 export default function PocList() {
     const user = useAuthStore((s) => s.user);
     const canUseStatusFilters = user?.role === 'admin' || user?.role === 'developer';
+    const assignedAdminTrack = getAssignedAdminTrack(user);
+    const isTrackSubAdmin = user?.role === 'admin' && !!assignedAdminTrack && !isSuperAdmin(user);
     const [searchParams, setSearchParams] = useSearchParams();
 
     const statusFromUrl = (searchParams.get('status') || '').toLowerCase();
     const interestedFromUrl = searchParams.get('interested') === 'true';
+    const involvedFromUrl = searchParams.get('involved') === 'true';
+    const pocContactFromUrl = searchParams.get('pocContact') === 'true';
     const trackFromUrl = searchParams.get('track') || 'all';
     const impactFromUrl = searchParams.get('impact') || 'all';
 
-    const initialStatus = canUseStatusFilters
+    const initialStatus = pocContactFromUrl
+        ? 'all'
+        : canUseStatusFilters
         ? (STATUS_OPTIONS.includes(statusFromUrl) ? statusFromUrl : 'all')
         : (VIEWER_STATUS_OPTIONS.includes(statusFromUrl) ? statusFromUrl : 'published');
-    const initialTrack = TRACK_OPTIONS.some((t) => t.value === trackFromUrl) ? trackFromUrl : 'all';
+    const isLockedCancelledTrackView = isTrackSubAdmin && initialStatus === 'cancelled';
+    const initialTrack = isLockedCancelledTrackView
+        ? assignedAdminTrack
+        : (TRACK_OPTIONS.some((t) => t.value === trackFromUrl) ? trackFromUrl : 'all');
     const initialImpact = IMPACT_OPTIONS.includes(impactFromUrl) ? impactFromUrl : 'all';
 
     const [pocs, setPocs] = useState([]);
@@ -54,6 +64,8 @@ export default function PocList() {
     const [trackFilter, setTrackFilter] = useState(initialTrack);
     const [impactFilter, setImpactFilter] = useState(initialImpact);
     const [interestedOnly, setInterestedOnly] = useState(interestedFromUrl);
+    const [involvedOnly, setInvolvedOnly] = useState(involvedFromUrl);
+    const [pocContactOnly, setPocContactOnly] = useState(pocContactFromUrl);
     const [tagFilter, setTagFilter] = useState('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -64,11 +76,15 @@ export default function PocList() {
     const [availabilityValue, setAvailabilityValue] = useState('');
     const [availabilityUnit, setAvailabilityUnit] = useState('per week');
 
+    const lockCancelledTrackView = isTrackSubAdmin && statusFilter === 'cancelled';
+
     const syncParams = useCallback((nextState) => {
         const nextStatus = nextState.status ?? statusFilter;
-        const nextTrack = nextState.track ?? trackFilter;
+        const nextTrack = lockCancelledTrackView ? assignedAdminTrack : (nextState.track ?? trackFilter);
         const nextImpact = nextState.impact ?? impactFilter;
         const nextInterested = nextState.interested ?? interestedOnly;
+        const nextInvolved = nextState.involved ?? involvedOnly;
+        const nextPocContact = nextState.pocContact ?? pocContactOnly;
 
         setSearchParams((prev) => {
             const next = new URLSearchParams(prev);
@@ -80,9 +96,13 @@ export default function PocList() {
             else next.delete('impact');
             if (nextInterested) next.set('interested', 'true');
             else next.delete('interested');
+            if (nextInvolved) next.set('involved', 'true');
+            else next.delete('involved');
+            if (nextPocContact) next.set('pocContact', 'true');
+            else next.delete('pocContact');
             return next;
         });
-    }, [impactFilter, interestedOnly, setSearchParams, statusFilter, trackFilter]);
+    }, [assignedAdminTrack, impactFilter, interestedOnly, involvedOnly, lockCancelledTrackView, pocContactOnly, setSearchParams, statusFilter, trackFilter]);
 
     const fetchPocs = useCallback(async (page = 1) => {
         setLoading(true);
@@ -90,10 +110,14 @@ export default function PocList() {
         try {
             const params = { page, limit: 9 };
             if (search) params.search = search;
-            if (statusFilter !== 'all') params.status = statusFilter;
-            if (trackFilter !== 'all') params.track = trackFilter;
+            if (pocContactOnly) params.pocContact = true;
+            if (!pocContactOnly && statusFilter !== 'all') params.status = statusFilter;
+            else if (canUseStatusFilters) params.excludeCancelled = true;
+            if (lockCancelledTrackView) params.track = assignedAdminTrack;
+            else if (trackFilter !== 'all') params.track = trackFilter;
             if (impactFilter !== 'all') params.impact = impactFilter;
             if (interestedOnly) params.interested = true;
+            if (involvedOnly) params.involved = true;
             if (tagFilter) params.tag = tagFilter;
 
             const { data } = await pocService.getAll(params);
@@ -104,7 +128,7 @@ export default function PocList() {
         } finally {
             setLoading(false);
         }
-    }, [impactFilter, interestedOnly, search, statusFilter, tagFilter, trackFilter]);
+    }, [assignedAdminTrack, impactFilter, interestedOnly, involvedOnly, lockCancelledTrackView, pocContactOnly, search, statusFilter, tagFilter, trackFilter]);
 
     useEffect(() => {
         const debounce = setTimeout(() => fetchPocs(1), 300);
@@ -120,12 +144,27 @@ export default function PocList() {
     }, [initialTrack, trackFilter]);
 
     useEffect(() => {
+        if (lockCancelledTrackView && trackFilter !== assignedAdminTrack) {
+            setTrackFilter(assignedAdminTrack);
+            syncParams({ track: assignedAdminTrack });
+        }
+    }, [assignedAdminTrack, lockCancelledTrackView, syncParams, trackFilter]);
+
+    useEffect(() => {
         if (impactFilter !== initialImpact) setImpactFilter(initialImpact);
     }, [impactFilter, initialImpact]);
 
     useEffect(() => {
         if (interestedOnly !== interestedFromUrl) setInterestedOnly(interestedFromUrl);
     }, [interestedFromUrl, interestedOnly]);
+
+    useEffect(() => {
+        if (involvedOnly !== involvedFromUrl) setInvolvedOnly(involvedFromUrl);
+    }, [involvedFromUrl, involvedOnly]);
+
+    useEffect(() => {
+        if (pocContactOnly !== pocContactFromUrl) setPocContactOnly(pocContactFromUrl);
+    }, [pocContactFromUrl, pocContactOnly]);
 
     const canVoteOnPoc = (poc) => {
         if (user?.role === 'admin') return false;
@@ -134,9 +173,16 @@ export default function PocList() {
         return authorId !== user?._id && authorId !== user?.id;
     };
 
+    const isCurrentUserApprovedOnPoc = (poc) => {
+        const currentUserId = String(user?._id || user?.id || '');
+        const approvedUsers = poc?.approvedUsers || [];
+        return approvedUsers.some((approvedId) => String(approvedId) === currentUserId);
+    };
+
     const handleToggleInterest = async (e, poc) => {
         e.preventDefault();
         e.stopPropagation();
+        if (isCurrentUserApprovedOnPoc(poc)) return;
         setError('');
         setSelectedInterestPoc(poc);
         setAvailabilityValue('');
@@ -203,7 +249,9 @@ export default function PocList() {
         (trackFilter !== 'all' ? 1 : 0) +
         (impactFilter !== 'all' ? 1 : 0) +
         (statusFilter !== (canUseStatusFilters ? 'all' : 'published') ? 1 : 0) +
-        (interestedOnly ? 1 : 0);
+        (interestedOnly ? 1 : 0) +
+        (involvedOnly ? 1 : 0) +
+        (pocContactOnly ? 1 : 0);
 
     const resetFilters = () => {
         const nextStatus = canUseStatusFilters ? 'all' : 'published';
@@ -211,11 +259,15 @@ export default function PocList() {
         setTrackFilter('all');
         setImpactFilter('all');
         setInterestedOnly(false);
+        setInvolvedOnly(false);
+        setPocContactOnly(false);
         syncParams({
             status: nextStatus,
             track: 'all',
             impact: 'all',
             interested: false,
+            involved: false,
+            pocContact: false,
         });
     };
 
@@ -292,13 +344,31 @@ export default function PocList() {
                                 {[
                                     { value: false, label: 'All Visible' },
                                     { value: true, label: 'My Interested' },
+                                    { value: 'involved', label: 'My Involved' },
                                 ].map((option) => (
                                     <FilterChip
                                         key={option.label}
-                                        active={interestedOnly === option.value}
+                                        active={
+                                            option.value === false
+                                                ? !interestedOnly && !involvedOnly
+                                                : option.value === true
+                                                    ? interestedOnly
+                                                    : involvedOnly
+                                        }
                                         onClick={() => {
-                                            setInterestedOnly(option.value);
-                                            syncParams({ interested: option.value });
+                                            if (option.value === false) {
+                                                setInterestedOnly(false);
+                                                setInvolvedOnly(false);
+                                                syncParams({ interested: false, involved: false });
+                                            } else if (option.value === true) {
+                                                setInterestedOnly(true);
+                                                setInvolvedOnly(false);
+                                                syncParams({ interested: true, involved: false });
+                                            } else {
+                                                setInterestedOnly(false);
+                                                setInvolvedOnly(true);
+                                                syncParams({ interested: false, involved: true });
+                                            }
                                         }}
                                     >
                                         {option.label}
@@ -308,23 +378,25 @@ export default function PocList() {
                         </div>
                     )}
 
-                    <div className="space-y-3">
-                        <h3 className="text-sm font-semibold uppercase tracking-wide text-charcoal-500">Track</h3>
-                        <div className="flex flex-wrap gap-2">
-                            {TRACK_OPTIONS.map((track) => (
-                                <FilterChip
-                                    key={track.value}
-                                    active={trackFilter === track.value}
-                                    onClick={() => {
-                                        setTrackFilter(track.value);
-                                        syncParams({ track: track.value });
-                                    }}
-                                >
-                                    {track.label}
-                                </FilterChip>
-                            ))}
+                    {!lockCancelledTrackView && (
+                        <div className="space-y-3">
+                            <h3 className="text-sm font-semibold uppercase tracking-wide text-charcoal-500">Track</h3>
+                            <div className="flex flex-wrap gap-2">
+                                {TRACK_OPTIONS.map((track) => (
+                                    <FilterChip
+                                        key={track.value}
+                                        active={trackFilter === track.value}
+                                        onClick={() => {
+                                            setTrackFilter(track.value);
+                                            syncParams({ track: track.value });
+                                        }}
+                                    >
+                                        {track.label}
+                                    </FilterChip>
+                                ))}
+                            </div>
                         </div>
-                    </div>
+                    )}
 
                     <div className="space-y-3">
                         <h3 className="text-sm font-semibold uppercase tracking-wide text-charcoal-500">Impact</h3>
@@ -489,7 +561,7 @@ export default function PocList() {
                                             </div>
                                         )}
                                         <div className="absolute top-3 right-3 flex flex-col gap-2 items-end">
-                                            <Badge color={poc.status === 'published' ? 'green' : poc.status === 'finished' ? 'green' : 'amber'}>
+                                            <Badge color={poc.status === 'cancelled' ? 'coral' : (poc.status === 'published' || poc.status === 'live' || poc.status === 'finished' ? 'green' : 'amber')}>
                                                 {poc.status}
                                             </Badge>
                                             {poc.impact && (
@@ -528,11 +600,12 @@ export default function PocList() {
                                                 <Button
                                                     type="button"
                                                     size="sm"
-                                                    variant={poc.hasVoted ? 'secondary' : 'outline'}
+                                                    variant={isCurrentUserApprovedOnPoc(poc) ? 'secondary' : (poc.hasVoted ? 'secondary' : 'outline')}
                                                     loading={votingId === poc._id}
+                                                    disabled={isCurrentUserApprovedOnPoc(poc)}
                                                     onClick={(e) => handleToggleInterest(e, poc)}
                                                 >
-                                                    {poc.hasVoted ? 'Interested' : 'Mark Interested'}
+                                                    {isCurrentUserApprovedOnPoc(poc) ? 'Approved' : (poc.hasVoted ? 'Interested' : 'Mark Interested')}
                                                 </Button>
                                             </div>
                                         )}
