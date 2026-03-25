@@ -38,6 +38,7 @@ export default function Dashboard() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [allPocs, setAllPocs] = useState([]);
+    const [viewerInvolvedPocs, setViewerInvolvedPocs] = useState([]);
     const [pipelineFilter, setPipelineFilter] = useState(null);
     const [trackStats, setTrackStats] = useState(buildEmptyTrackStats());
     const [topUsersByCredits, setTopUsersByCredits] = useState([]);
@@ -91,6 +92,19 @@ export default function Dashboard() {
             setRecentPocs(pocs);
             setTrackStats(computedTrackStats);
             setAllPocs(allTrackPocs);
+            if (isViewer) {
+                const firstInvolvedPageRes = await pocService.getAll({ page: 1, limit: 100, involved: true });
+                const firstInvolvedPageData = firstInvolvedPageRes.data;
+                let allInvolved = firstInvolvedPageData.pocs || [];
+                const involvedPages = firstInvolvedPageData.pagination?.pages || 1;
+                for (let page = 2; page <= involvedPages; page += 1) {
+                    const res = await pocService.getAll({ page, limit: 100, involved: true });
+                    allInvolved = allInvolved.concat(res.data.pocs || []);
+                }
+                setViewerInvolvedPocs(allInvolved);
+            } else {
+                setViewerInvolvedPocs([]);
+            }
             const leaderboardRes = await userService.getLeaderboard({ limit: 5, sortBy: 'credits', track: 'all' });
             setTopUsersByCredits(leaderboardRes.data?.leaderboard || []);
         } catch {
@@ -147,22 +161,21 @@ export default function Dashboard() {
     if (error) return <ErrorState message={error} onRetry={fetchDashboard} />;
 
     const liveRate = Math.round(animatedLivePct);
-    const viewerInterestedPocs = allPocs.filter((poc) => poc.hasVoted);
-    const viewerInterestedPublished = viewerInterestedPocs.filter((poc) => poc.status === 'published').length;
-    const viewerInterestedLive = viewerInterestedPocs.filter((poc) => poc.status === 'live').length;
-    const viewerInterestedFinished = viewerInterestedPocs.filter((poc) => poc.status === 'finished').length;
-    const viewerInterestedTotal = viewerInterestedPublished + viewerInterestedLive + viewerInterestedFinished;
-    const viewerPublishedPct = viewerInterestedTotal ? Math.round((viewerInterestedPublished / viewerInterestedTotal) * 100) : 0;
-    const viewerLivePct = viewerInterestedTotal ? Math.round((viewerInterestedLive / viewerInterestedTotal) * 100) : 0;
-    const viewerFinishedPct = viewerInterestedTotal ? Math.round((viewerInterestedFinished / viewerInterestedTotal) * 100) : 0;
+    const viewerInvolvedPublished = viewerInvolvedPocs.filter((poc) => poc.status === 'published').length;
+    const viewerInvolvedLive = viewerInvolvedPocs.filter((poc) => poc.status === 'live').length;
+    const viewerInvolvedFinished = viewerInvolvedPocs.filter((poc) => poc.status === 'finished').length;
+    const viewerInvolvedTotal = viewerInvolvedPublished + viewerInvolvedLive + viewerInvolvedFinished;
+    const viewerPublishedPct = viewerInvolvedTotal ? Math.round((viewerInvolvedPublished / viewerInvolvedTotal) * 100) : 0;
+    const viewerLivePct = viewerInvolvedTotal ? Math.round((viewerInvolvedLive / viewerInvolvedTotal) * 100) : 0;
+    const viewerFinishedPct = viewerInvolvedTotal ? Math.round((viewerInvolvedFinished / viewerInvolvedTotal) * 100) : 0;
     const draftShare = stats.total ? Math.round((stats.drafts / stats.total) * 100) : 0;
     const publishedShare = stats.total ? Math.round((stats.published / stats.total) * 100) : 0;
     const liveShare = stats.total ? Math.round((stats.live / stats.total) * 100) : 0;
     const finishedShare = stats.total ? Math.round((stats.finished / stats.total) * 100) : 0;
     const cancelledShare = stats.total ? Math.round((stats.cancelled / stats.total) * 100) : 0;
-    const displayedPublishedCount = isViewer ? viewerInterestedPublished : stats.published;
-    const displayedLiveCount = isViewer ? viewerInterestedLive : stats.live;
-    const displayedFinishedCount = isViewer ? viewerInterestedFinished : stats.finished;
+    const displayedPublishedCount = isViewer ? viewerInvolvedPublished : stats.published;
+    const displayedLiveCount = isViewer ? viewerInvolvedLive : stats.live;
+    const displayedFinishedCount = isViewer ? viewerInvolvedFinished : stats.finished;
     const displayedPublishedPct = isViewer ? viewerPublishedPct : animatedPublishedPct;
     const displayedLivePct = isViewer ? viewerLivePct : animatedLivePct;
     const displayedFinishedPct = isViewer ? viewerFinishedPct : animatedFinishedPct;
@@ -175,7 +188,7 @@ export default function Dashboard() {
     };
 
     const activePipelineItems = pipelineFilter
-        ? (isViewer ? allPocs.filter((poc) => poc.hasVoted) : allPocs).filter((poc) => {
+        ? (isViewer ? viewerInvolvedPocs : allPocs).filter((poc) => {
             const interestedMatch = pipelineFilter.interested ? poc.hasVoted : true;
             const statusMatch = pipelineFilter.status ? poc.status === pipelineFilter.status : true;
             const trackMatch = pipelineFilter.track ? poc.track === pipelineFilter.track : true;
