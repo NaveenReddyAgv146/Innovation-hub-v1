@@ -58,6 +58,7 @@ const harmonicMean = (a, b) => {
     if (!Number.isFinite(x) || !Number.isFinite(y) || x <= 0 || y <= 0) return 0;
     return (2 * x * y) / (x + y);
 };
+const STAR_OPTIONS = [1, 2, 3, 4, 5];
 
 export default function PocDetail() {
     const { id } = useParams();
@@ -87,6 +88,7 @@ export default function PocDetail() {
     const [usersPanelTab, setUsersPanelTab] = useState('interested');
     const [selectedFeedbackUserId, setSelectedFeedbackUserId] = useState('');
     const [adminFeedbackText, setAdminFeedbackText] = useState('');
+    const [adminFeedbackRating, setAdminFeedbackRating] = useState(0);
     const [userFeedbackText, setUserFeedbackText] = useState('');
     const [savingAdminFeedback, setSavingAdminFeedback] = useState(false);
     const [savingUserFeedback, setSavingUserFeedback] = useState(false);
@@ -177,6 +179,11 @@ export default function PocDetail() {
     const selectedFeedbackUser = participantOptions.find(
         (voter) => String(voter.id) === String(selectedFeedbackUserId)
     );
+    const myExistingAdminFeedback = adminFeedbacks.find(
+        (item) =>
+            String(item?.userId || '') === String(selectedFeedbackUserId || '') &&
+            String(item?.givenById || '') === String(currentUserId || '')
+    );
     const participation = poc?.currentUserParticipation || null;
     const myElapsedSeconds = Number(participation?.elapsedSeconds || 0);
     const myHoursSpent = myElapsedSeconds > 0 ? myElapsedSeconds / 3600 : 0;
@@ -215,6 +222,17 @@ export default function PocDetail() {
     useEffect(() => {
         setUserFeedbackText(myExistingUserFeedback?.feedback || '');
     }, [myExistingUserFeedback?.feedback]);
+
+    useEffect(() => {
+        if (!selectedFeedbackUserId) {
+            setAdminFeedbackText('');
+            setAdminFeedbackRating(0);
+            return;
+        }
+        setAdminFeedbackText(myExistingAdminFeedback?.feedback || '');
+        const savedRating = Number(myExistingAdminFeedback?.rating || 0);
+        setAdminFeedbackRating(savedRating >= 1 && savedRating <= 5 ? savedRating : 0);
+    }, [selectedFeedbackUserId, myExistingAdminFeedback?.feedback, myExistingAdminFeedback?.rating]);
 
     const handleCancelIdea = () => {
         setCancelReason('');
@@ -422,11 +440,16 @@ export default function PocDetail() {
             setError('Please enter performance feedback');
             return;
         }
+        if (!Number.isInteger(adminFeedbackRating) || adminFeedbackRating < 1 || adminFeedbackRating > 5) {
+            setError('Please provide a rating between 1 and 5 stars');
+            return;
+        }
         setSavingAdminFeedback(true);
         setError('');
         try {
-            await pocService.addAdminFeedback(poc._id, selectedFeedbackUserId, adminFeedbackText.trim());
+            await pocService.addAdminFeedback(poc._id, selectedFeedbackUserId, adminFeedbackText.trim(), adminFeedbackRating);
             setAdminFeedbackText('');
+            setAdminFeedbackRating(0);
             await fetchPoc();
         } catch (err) {
             setError(getApiErrorMessage(err, 'Failed to save admin feedback'));
@@ -853,6 +876,32 @@ export default function PocDetail() {
                                             Writing feedback for <span className="font-semibold text-charcoal-800">{selectedFeedbackUser.name}</span>
                                         </p>
                                     )}
+                                    <div className="space-y-1">
+                                        <label className="text-xs uppercase tracking-wide text-charcoal-500">Performance Rating</label>
+                                        <div className="flex items-center gap-1.5">
+                                            {STAR_OPTIONS.map((starValue) => {
+                                                const active = starValue <= adminFeedbackRating;
+                                                return (
+                                                    <button
+                                                        key={`admin-rating-star-${starValue}`}
+                                                        type="button"
+                                                        onClick={() => setAdminFeedbackRating(starValue)}
+                                                        className={`rounded-md p-1.5 transition-colors ${
+                                                            active ? 'text-amber-500' : 'text-sand-400 hover:text-amber-400'
+                                                        }`}
+                                                        title={`${starValue} star${starValue > 1 ? 's' : ''}`}
+                                                    >
+                                                        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" aria-hidden="true">
+                                                            <path d="M12 2.5l2.95 5.98 6.6.96-4.77 4.65 1.13 6.57L12 17.56 6.09 20.66l1.13-6.57-4.77-4.65 6.6-.96L12 2.5z" />
+                                                        </svg>
+                                                    </button>
+                                                );
+                                            })}
+                                            <span className="ml-1 text-xs text-charcoal-600">
+                                                {adminFeedbackRating > 0 ? `${adminFeedbackRating}/5` : 'Select rating'}
+                                            </span>
+                                        </div>
+                                    </div>
                                     <textarea
                                         value={adminFeedbackText}
                                         onChange={(e) => setAdminFeedbackText(e.target.value)}
@@ -927,6 +976,22 @@ export default function PocDetail() {
                                                 <div className="min-w-0">
                                                     <p className="text-sm font-semibold text-charcoal-800 truncate">{item.userName || item.userEmail || 'User'}</p>
                                                     <p className="text-xs text-charcoal-500 truncate">By {item.givenByName || item.givenByEmail || 'Admin'}</p>
+                                                    {Number(item.rating || 0) >= 1 && Number(item.rating || 0) <= 5 && (
+                                                        <div className="mt-1 flex items-center gap-1">
+                                                            {STAR_OPTIONS.map((starValue) => (
+                                                                <svg
+                                                                    key={`feedback-star-${index}-${starValue}`}
+                                                                    viewBox="0 0 24 24"
+                                                                    className={`h-3.5 w-3.5 ${starValue <= Number(item.rating) ? 'text-amber-500' : 'text-sand-300'}`}
+                                                                    fill="currentColor"
+                                                                    aria-hidden="true"
+                                                                >
+                                                                    <path d="M12 2.5l2.95 5.98 6.6.96-4.77 4.65 1.13 6.57L12 17.56 6.09 20.66l1.13-6.57-4.77-4.65 6.6-.96L12 2.5z" />
+                                                                </svg>
+                                                            ))}
+                                                            <span className="text-[11px] text-charcoal-500">{Number(item.rating)}/5</span>
+                                                        </div>
+                                                    )}
                                                 </div>
                                                 <span className="text-[11px] text-charcoal-400 whitespace-nowrap">
                                                     {formatIstDateTime(item.updatedAt || item.createdAt)}

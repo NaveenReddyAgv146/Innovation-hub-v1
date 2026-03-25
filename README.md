@@ -1,140 +1,121 @@
-# Innovation Garage v1
+# Innovation Hub v1
 
-Innovation Hub is a full-stack platform for collecting, reviewing, publishing, and tracking internal POC ideas with role-based access control.
+Innovation Hub is a full-stack internal contribution platform for submitting, reviewing, publishing, and tracking POCs with role-based access (`admin`, `developer`, `viewer`).
 
-## What This App Supports
+## Highlights
 
-- JWT authentication (`register`, `login`, `refresh`, `logout`, `me`)
-- Role-based flows for `admin`, `developer`, and `viewer`
-- Super admin flow for `admin@agivant.com`
-- Track admin flow with `My Track Dashboard`
-- POC CRUD with status (`draft` / `published` / `finished`)
-- Admin-only publish workflow through Idea Reviews
-- Track-scoped creation and publishing for track admins
-- Interest voting on published ideas (non-admin, non-owner)
-- User management (super admin only)
-- Image upload for POC thumbnails (`/uploads`)
-- Dark mode with persisted preference
-- Publish success notification in Idea Reviews
-- Delete confirmation modal for POC deletion
+- JWT auth: register, login, refresh, logout, me
+- Role-based UX and route protection
+- Super admin + track admin model
+- Contribution lifecycle: `draft -> published -> live -> finished` (+ `cancelled`)
+- Interest and approval flow for contributors
+- Feedback system on finished contributions
+- Credits and leaderboard
+- Thumbnail uploads via `/uploads`
+
+## Recent Changes (Included)
+
+- Viewer dashboard card updated from **Track Ratio** to **Top 5 Users by Credits**.
+- `/users/leaderboard` is now available to all authenticated users (used by viewer dashboard too).
+- Admin feedback now supports **mandatory rating (1 to 5 stars)** per participant.
+- Admin feedback timeline now shows stored star ratings.
+- Viewer contribution filter bug fixed: selecting **Published** now returns only `published` items (not live/finished).
+- Power Automate webhook support is documented via env var:
+  - `POWER_AUTOMATE_LIVE_WEBHOOK_URL`
 
 ## Tech Stack
 
 - Frontend: React 19, Vite 7, React Router, Axios, Tailwind CSS v4
-- Backend: FastAPI, MongoDB, python, passlib/bcrypt
+- Backend: FastAPI, Motor (MongoDB), Pydantic Settings, JWT
 - Database: MongoDB
 
 ## Project Structure
 
 ```text
-POC_upload/
-  client/            # Frontend (React + Vite)
-  backend-fastapi/   # Backend (FastAPI)
+Innovation-hub-v1/
+  client/
+  backend-fastapi/
 ```
 
 ## Prerequisites
 
 - Node.js 18+
+- npm 9+
 - Python 3.10+
-- MongoDB (local or hosted)
+- MongoDB (local or Atlas)
 
-## Create MongoDB Instance
+## Backend Setup
 
-You can use either local MongoDB or MongoDB Atlas.
-
-### Option A: Local MongoDB (quickest for development)
-
-1. Install MongoDB Community Edition and MongoDB Compass.
-2. Start MongoDB service (Windows):
-
-```powershell
-net start MongoDB
-```
-
-3. Use this connection string in backend `.env`:
-
-```env
-MONGODB_URI=mongodb://127.0.0.1:27017/poc_showcase
-MONGODB_DB_NAME=poc_showcase
-```
-
-### Option B: MongoDB Atlas (cloud)
-
-1. Create account at `https://www.mongodb.com/atlas`.
-2. Create a new project and a free cluster (M0).
-3. In Atlas:
-- Create a database user (save username/password).
-- Add your IP in Network Access (or allow `0.0.0.0/0` only for temporary dev).
-4. Click `Connect` -> `Drivers` and copy the URI.
-5. Replace placeholders and set backend `.env`:
-
-```env
-MONGODB_URI=mongodb+srv://<username>:<password>@<cluster-url>/poc_showcase?retryWrites=true&w=majority
-MONGODB_DB_NAME=poc_showcase
-```
-
-6. If your password has special characters, URL-encode it.
-
-## End-to-End Local Setup (Windows PowerShell)
-
-### 1. Backend Setup
-
-```powershell
+```bash
 cd backend-fastapi
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
-copy .env.example .env
 ```
 
-Edit `backend-fastapi/.env`:
+Create `backend-fastapi/.env`:
 
 ```env
 APP_NAME=POC FastAPI Backend
 APP_ENV=development
 PORT=8000
+
 MONGODB_URI=mongodb://127.0.0.1:27017/poc_showcase
 MONGODB_DB_NAME=poc_showcase
+
 CLIENT_URL=http://localhost:5173
+CLIENT_URLS=
+CLIENT_URL_REGEX=https?://(localhost|127\.0\.0\.1)(:\d+)?
+
 JWT_ACCESS_SECRET=replace_with_a_secure_access_secret
 JWT_REFRESH_SECRET=replace_with_a_secure_refresh_secret
 JWT_ACCESS_EXPIRY_MINUTES=15
 JWT_REFRESH_EXPIRY_DAYS=7
+
 SUPER_ADMIN_EMAIL=admin@agivant.com
+
+# Optional: Power Automate webhook for live notifications
+POWER_AUTOMATE_LIVE_WEBHOOK_URL=
 ```
 
 Run backend:
 
-```powershell
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8010
+```bash
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8010
 ```
 
-### 2. Frontend Setup
+Health:
 
-```powershell
+- `http://127.0.0.1:8010/api/health`
+
+## Frontend Setup
+
+```bash
 cd client
 npm install
 ```
 
-Create or update `client/.env`:
+Create `client/.env`:
 
 ```env
-VITE_BACKEND_URL=http://localhost:8010
+VITE_BACKEND_URL=http://127.0.0.1:8010
 ```
 
 Run frontend:
 
-```powershell
+```bash
 npm run dev -- --host 127.0.0.1 --port 5173 --strictPort
 ```
 
-The frontend proxies `/api` and `/uploads` to `VITE_BACKEND_URL`.
+App URL:
+
+- `http://127.0.0.1:5173`
 
 ## Seed Admin User
 
-```powershell
+```bash
 cd backend-fastapi
-.\.venv\Scripts\Activate.ps1
+source .venv/bin/activate
 python -m scripts.seed_admin
 ```
 
@@ -145,115 +126,93 @@ Default admin credentials:
 
 ## Role Behavior
 
-- `admin@agivant.com`:
-  super admin; can manage users, create track admins, review/publish ideas across all tracks, and view interested users
-- Track admin:
-  an `admin` user with an assigned `adminTrack`; can access `My Track Dashboard`, create innovations only in that track, and publish/manage draft innovations only in that track
-- `developer`: create POCs, edit/delete own POCs, mark interest on other published POCs
-- `viewer`: browse published POCs, submit draft ideas, mark interest on eligible published POCs
+- `admin`:
+  - Super admin can manage users across tracks
+  - Track admins can manage only their assigned track
+  - Can review/publish/manage contributions in allowed scope
+  - Can provide admin feedback + star ratings on finished contributions
+- `developer`:
+  - Can create and manage own contributions
+  - Can mark interest in eligible contributions
+- `viewer`:
+  - Can browse visible contributions
+  - Can mark interest, view involved contributions
+  - Can see personal credits
 
-## Track Admin Behavior
+## Feedback & Rating (Finished Contributions)
 
-- When the super admin creates an `admin`, the app asks which track that admin belongs to.
-- Supported tracks:
-  `Solutions`, `Delivery`, `Learning`, `GTM/Sales`, `Organizational Building & Thought Leadership`
-- A track admin can:
-  access `My Track Dashboard`
-  create new innovations only in the assigned track
-  review/publish only draft ideas in the assigned track
-- A track admin cannot:
-  access the `Users` section
-  manage ideas outside the assigned track
+- Admin feedback is allowed only on `finished` contributions.
+- Admin must select participant, write feedback, and choose **1–5 star rating**.
+- The latest feedback per `(admin, participant, contribution)` is stored.
+- User feedback is also supported for approved participants.
+
+## Credits & Leaderboard
+
+- Credits are derived from finished contributions.
+- Leaderboard supports sorting and track filtering.
+- Viewer dashboard shows **Top 5 Users by Credits**.
 
 ## API Overview
 
 Base prefix: `/api`
 
-- Health: `GET /health`
-- Auth: `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `GET /auth/me`
-- Users:
-  `GET /users`, `GET /users/{user_id}`, `POST /users`, `PUT /users/{user_id}`, `DELETE /users/{user_id}` (super admin only)
-  `GET /users/interests` (admin access)
-- POCs:
-  `GET /pocs`, `GET /pocs/{poc_id}`, `POST /pocs`, `PUT /pocs/{poc_id}`, `DELETE /pocs/{poc_id}`
-  `POST /pocs/{poc_id}/publish`, `POST /pocs/{poc_id}/finish`, `POST /pocs/{poc_id}/mark-draft`
-  `POST /pocs/{poc_id}/upvote`, `DELETE /pocs/{poc_id}/upvote`, `GET /pocs/{poc_id}/voters`
+Auth:
 
-Uploads are served at `/uploads`.
+- `POST /auth/register`
+- `POST /auth/login`
+- `POST /auth/refresh`
+- `POST /auth/logout`
+- `GET /auth/me`
+
+Users:
+
+- `GET /users`
+- `GET /users/{user_id}`
+- `POST /users`
+- `PUT /users/{user_id}`
+- `DELETE /users/{user_id}`
+- `GET /users/interests`
+- `GET /users/leaderboard`
+- `GET /users/directory`
+- `GET /users/my-credits`
+
+POCs:
+
+- `GET /pocs`
+- `GET /pocs/{poc_id}`
+- `POST /pocs`
+- `PUT /pocs/{poc_id}`
+- `DELETE /pocs/{poc_id}`
+- `POST /pocs/{poc_id}/publish`
+- `POST /pocs/{poc_id}/go-live`
+- `POST /pocs/{poc_id}/finish`
+- `POST /pocs/{poc_id}/mark-draft`
+- `POST /pocs/{poc_id}/cancel`
+- `POST /pocs/{poc_id}/cancel-reason`
+- `POST /pocs/{poc_id}/upvote`
+- `DELETE /pocs/{poc_id}/upvote`
+- `GET /pocs/{poc_id}/voters`
+- `POST /pocs/{poc_id}/approve-user`
+- `POST /pocs/{poc_id}/unapprove-user`
+- `POST /pocs/{poc_id}/admin-feedback` (requires `feedback`, `userId`, `rating`)
+- `POST /pocs/{poc_id}/user-feedback`
+
+Health:
+
+- `GET /health`
 
 ## Frontend Scripts
 
 From `client/`:
 
-- `npm run dev` - start dev server
-- `npm run build` - build production bundle
-- `npm run preview` - preview production build
-- `npm run lint` - run eslint
+- `npm run dev`
+- `npm run build`
+- `npm run preview`
+- `npm run lint`
 
-## Backend Run Notes
+## Notes
 
-- `PORT` in `.env` is app config, but local run port is controlled by uvicorn command.
-- Keep `CLIENT_URL` and frontend dev URL aligned (`http://localhost:5173` in this setup).
-- If you change the super admin email, also update `SUPER_ADMIN_EMAIL` in backend `.env`.
-
-## Deploy to Vercel (Frontend + Backend)
-
-Deploy as **2 Vercel projects** from the same GitHub repo:
-
-1. Backend project (root: `backend-fastapi`)
-2. Frontend project (root: `client`)
-
-### 1. Deploy Backend (FastAPI) on Vercel
-
-Backend Vercel config files are included:
-
-- `backend-fastapi/vercel.json`
-- `backend-fastapi/api/index.py`
-
-In Vercel:
-
-1. Create new project -> import this repo.
-2. Set **Root Directory** to `backend-fastapi`.
-3. Add environment variables:
-- `MONGODB_URI`
-- `MONGODB_DB_NAME`
-- `JWT_ACCESS_SECRET`
-- `JWT_REFRESH_SECRET`
-- `JWT_ACCESS_EXPIRY_MINUTES` (for example `15`)
-- `JWT_REFRESH_EXPIRY_DAYS` (for example `7`)
-- `CLIENT_URL` (your frontend production URL, later from frontend project)
-- Optional: `CLIENT_URLS` (comma-separated extra origins)
-- Optional: `CLIENT_URL_REGEX` (default already allows localhost)
-4. Deploy.
-
-After deploy, test:
-
-- `https://<your-backend>.vercel.app/api/health`
-
-### 2. Deploy Frontend (Vite) on Vercel
-
-1. Create another Vercel project from same repo.
-2. Set **Root Directory** to `client`.
-3. Add env var:
-- `VITE_API_BASE_URL=https://<your-backend>.vercel.app/api`
-4. Deploy.
-
-### 3. Update Backend CORS
-
-After frontend URL is live:
-
-1. Go back to backend project env vars.
-2. Set `CLIENT_URL=https://<your-frontend>.vercel.app`
-3. Redeploy backend.
-
-## Important Serverless Note
-
-- Current thumbnail uploads are stored on local filesystem.
-- On Vercel, filesystem is ephemeral (`/tmp`), so uploaded files are not permanent.
-- For production, move uploads to external storage (Cloudinary, S3, or similar).
-
-
-
-cmd /c npm run dev -- --host 127.0.0.1 --port 5173 --strictPort
-
-.\.venv\Scripts\python -m uvicorn app.main:app --host 127.0.0.1 --port 8010
+- Uploads are served from `/uploads` and stored locally by default.
+- In serverless environments, local filesystem is ephemeral; use external object storage for production uploads.
+- If you change super admin email, keep `SUPER_ADMIN_EMAIL` in sync.
+- If `POWER_AUTOMATE_LIVE_WEBHOOK_URL` is empty, webhook notifications are skipped (no crash).

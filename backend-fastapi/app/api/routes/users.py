@@ -220,7 +220,7 @@ async def get_contribution_leaderboard(
     limit: int = Query(default=10, ge=1, le=100),
     track: str = Query(default=""),
     sortBy: str = Query(default="rank"),
-    current_user=Depends(require_roles("admin")),
+    current_user=Depends(get_current_user),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     admin_track = get_admin_track(current_user)

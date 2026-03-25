@@ -69,10 +69,11 @@ export const pocService = {
         formData.append('userId', userId);
         return api.post(`/pocs/${id}/unapprove-user`, formData);
     },
-    addAdminFeedback: (id, userId, feedback) => {
+    addAdminFeedback: (id, userId, feedback, rating) => {
         const formData = new FormData();
         formData.append('userId', userId);
         formData.append('feedback', feedback);
+        formData.append('rating', String(rating));
         return api.post(`/pocs/${id}/admin-feedback`, formData);
     },
     addUserFeedback: (id, feedback) => {

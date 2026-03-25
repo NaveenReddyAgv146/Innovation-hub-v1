@@ -544,7 +544,7 @@ async def get_pocs(
             query_parts.append({"status": "draft"})
             query_parts.append({"author": viewer_id})
         elif status_filter == "published":
-            query_parts.append({"status": {"$in": ["published", "live", "finished"]}})
+            query_parts.append({"status": "published"})
         elif status_filter == "live":
             query_parts.append({"status": "live"})
         elif status_filter == "finished":
@@ -1330,6 +1330,7 @@ async def add_admin_feedback(
     poc_id: str,
     userId: str = Form(...),
     feedback: str = Form(...),
+    rating: int = Form(...),
     current_user=Depends(require_roles("admin")),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
@@ -1342,6 +1343,8 @@ async def add_admin_feedback(
         )
     if not ObjectId.is_valid(userId):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid user id")
+    if rating < 1 or rating > 5:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Rating must be between 1 and 5")
 
     target_user_id = ObjectId(userId)
     approved_ids = {str(value) for value in (poc.get("approvedUsers") or [])}
@@ -1364,6 +1367,7 @@ async def add_admin_feedback(
         "userName": str(target_user.get("name") or "").strip(),
         "userEmail": str(target_user.get("email") or "").strip(),
         "feedback": cleaned_feedback,
+        "rating": int(rating),
         "givenById": given_by_id,
         "givenByName": str(current_user.get("name") or "").strip(),
         "givenByEmail": str(current_user.get("email") or "").strip(),

@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/authStore';
-import { pocService } from '../services/endpoints';
+import { pocService, userService } from '../services/endpoints';
 import Card from '../components/ui/Card';
 import Badge from '../components/ui/Badge';
 import Spinner from '../components/ui/Spinner';
@@ -40,6 +40,7 @@ export default function Dashboard() {
     const [allPocs, setAllPocs] = useState([]);
     const [pipelineFilter, setPipelineFilter] = useState(null);
     const [trackStats, setTrackStats] = useState(buildEmptyTrackStats());
+    const [topUsersByCredits, setTopUsersByCredits] = useState([]);
 
     const pipelineResetTimerRef = useRef(null);
     const animationFrameRef = useRef(null);
@@ -90,6 +91,8 @@ export default function Dashboard() {
             setRecentPocs(pocs);
             setTrackStats(computedTrackStats);
             setAllPocs(allTrackPocs);
+            const leaderboardRes = await userService.getLeaderboard({ limit: 5, sortBy: 'credits', track: 'all' });
+            setTopUsersByCredits(leaderboardRes.data?.leaderboard || []);
         } catch {
             setError('Failed to load dashboard data');
         } finally {
@@ -167,29 +170,8 @@ export default function Dashboard() {
     const liveDeg = isViewer ? 0 : Math.max(0, Math.min(360 - publishedDeg, animatedLivePct * 3.6));
     const draftDeg = isViewer ? 0 : Math.max(0, Math.min(360 - publishedDeg - liveDeg, animatedDraftPct * 3.6));
     const finishedStartDeg = publishedDeg + liveDeg + draftDeg;
-    const viewerTrackSegments = [];
-    let cumulativeTrackDeg = 0;
-    if (isViewer) {
-        TRACKS.forEach((track) => {
-            const count = trackStats[track.key]?.total || 0;
-            const degrees = stats.total ? (count / stats.total) * 360 : 0;
-            const start = cumulativeTrackDeg;
-            const end = start + degrees;
-            viewerTrackSegments.push({
-                key: track.key,
-                label: track.label,
-                color: track.ringColor,
-                count,
-                start,
-                end,
-            });
-            cumulativeTrackDeg = end;
-        });
-    }
     const ringStyle = {
-        background: isViewer
-            ? `conic-gradient(${viewerTrackSegments.map((segment) => `${segment.color} ${segment.start}deg ${segment.end}deg`).join(', ') || '#e2e8f0 0deg 360deg'})`
-            : `conic-gradient(#7c3aed 0deg ${publishedDeg}deg, var(--color-terracotta-500) ${publishedDeg}deg ${publishedDeg + liveDeg}deg, var(--color-amber-500) ${publishedDeg + liveDeg}deg ${finishedStartDeg}deg, #16a34a ${finishedStartDeg}deg 360deg)`,
+        background: `conic-gradient(#7c3aed 0deg ${publishedDeg}deg, var(--color-terracotta-500) ${publishedDeg}deg ${publishedDeg + liveDeg}deg, var(--color-amber-500) ${publishedDeg + liveDeg}deg ${finishedStartDeg}deg, #16a34a ${finishedStartDeg}deg 360deg)`,
     };
 
     const activePipelineItems = pipelineFilter
@@ -211,13 +193,9 @@ export default function Dashboard() {
         const y = event.clientY - rect.top - rect.height / 2;
         const angleFromTop = (Math.atan2(y, x) * 180) / Math.PI + 90;
         const normalized = (angleFromTop + 360) % 360;
-        if (isViewer) {
-            const clickedTrack = viewerTrackSegments.find((segment) => normalized <= segment.end)?.key;
-            return clickedTrack || TRACKS[TRACKS.length - 1].key;
-        }
         if (normalized <= publishedDeg) return 'published';
-        if (!isViewer && normalized <= publishedDeg + liveDeg) return 'live';
-        if (!isViewer && normalized <= publishedDeg + liveDeg + draftDeg) return 'draft';
+        if (normalized <= publishedDeg + liveDeg) return 'live';
+        if (normalized <= publishedDeg + liveDeg + draftDeg) return 'draft';
         return 'finished';
     };
 
@@ -231,11 +209,7 @@ export default function Dashboard() {
 
     const handleRingClick = (event) => {
         const clickedSegment = detectSegment(event);
-        if (isViewer) {
-            setPipelineFilter({ track: clickedSegment });
-        } else {
-            setPipelineFilter({ status: clickedSegment });
-        }
+        setPipelineFilter({ status: clickedSegment });
         schedulePipelineReset(true);
     };
 
@@ -437,37 +411,45 @@ export default function Dashboard() {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
                 <Card hover={false} className="p-5 lg:col-span-1">
-                    <h2 className="text-sm font-semibold text-charcoal-700 uppercase tracking-wide">{isViewer ? 'Track Ratio' : 'Go-Live Ratio'}</h2>
-                    <div className="mt-5 relative flex items-center justify-center">
-                        <div
-                            className="w-36 h-36 rounded-full p-3 cursor-pointer"
-                            style={ringStyle}
-                            onClick={handleRingClick}
-                            title={isViewer ? 'Click a track segment to filter pipeline' : 'Click segment to filter pipeline'}
-                        >
-                            <div className="w-full h-full rounded-full bg-white flex flex-col items-center justify-center">
-                                <p className="text-3xl font-bold text-charcoal-800">{isViewer ? stats.total : liveRate}{isViewer ? '' : '%'}</p>
-                                <p className="text-xs text-charcoal-500">{isViewer ? 'Contributions' : 'Live'}</p>
+                    <h2 className="text-sm font-semibold text-charcoal-700 uppercase tracking-wide">{isViewer ? 'Top 5 Users by Credits' : 'Go-Live Ratio'}</h2>
+                    {isViewer ? (
+                        <div className="mt-4 space-y-2">
+                            {topUsersByCredits.length === 0 ? (
+                                <p className="text-sm text-charcoal-500">No credit data available yet.</p>
+                            ) : (
+                                topUsersByCredits.map((row, idx) => (
+                                    <div key={row.user?._id || idx} className="flex items-center justify-between rounded-xl border border-sand-200 bg-sand-50 px-3 py-2">
+                                        <div className="min-w-0 flex-1">
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                <span className="w-7 shrink-0 text-sm font-semibold text-charcoal-800">#{idx + 1}</span>
+                                                <p className="text-sm font-semibold text-charcoal-800 truncate">{row.user?.name || 'Unknown User'}</p>
+                                            </div>
+                                            <p className="pl-9 text-xs text-charcoal-500 truncate">{row.user?.email || ''}</p>
+                                        </div>
+                                        <p className="text-sm font-bold text-violet-700 ml-3">{Number(row.totalCredits || 0).toFixed(2)}</p>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    ) : (
+                        <>
+                        <div className="mt-5 relative flex items-center justify-center">
+                            <div
+                                className="w-36 h-36 rounded-full p-3 cursor-pointer"
+                                style={ringStyle}
+                                onClick={handleRingClick}
+                                title="Click segment to filter pipeline"
+                            >
+                                <div className="w-full h-full rounded-full bg-white flex flex-col items-center justify-center">
+                                    <p className="text-3xl font-bold text-charcoal-800">{liveRate}%</p>
+                                    <p className="text-xs text-charcoal-500">Live</p>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                    <p className="text-sm text-charcoal-500 mt-4 text-center">
-                        {isViewer
-                            ? `Track distribution across ${stats.total} contribution briefs.`
-                            : `${stats.live} live out of ${stats.total} contribution briefs.`}
-                    </p>
-                    <div className="mt-3 flex items-center justify-center gap-4 text-xs">
-                        {isViewer ? (
-                            <div className="flex flex-wrap items-center justify-center gap-3">
-                                {TRACKS.map((track) => (
-                                    <span key={track.key} className="inline-flex items-center gap-2 text-charcoal-600">
-                                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: track.ringColor }} />
-                                        {track.label}
-                                    </span>
-                                ))}
-                            </div>
-                        ) : (
-                            <>
+                        <p className="text-sm text-charcoal-500 mt-4 text-center">
+                            {stats.live} live out of {stats.total} contribution briefs.
+                        </p>
+                        <div className="mt-3 flex items-center justify-center gap-4 text-xs">
                                 <span className="inline-flex items-center gap-2 text-charcoal-600">
                                     <span className="w-2.5 h-2.5 rounded-full bg-violet-600" />
                                     Published
@@ -484,9 +466,9 @@ export default function Dashboard() {
                                     <span className="w-2.5 h-2.5 rounded-full bg-green-600" />
                                     Finished
                                 </span>
-                            </>
-                        )}
-                    </div>
+                        </div>
+                        </>
+                    )}
                 </Card>
 
                 <Card
