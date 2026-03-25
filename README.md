@@ -75,7 +75,7 @@ JWT_REFRESH_EXPIRY_DAYS=7
 SUPER_ADMIN_EMAIL=admin@agivant.com
 
 # Optional: Power Automate webhook for live notifications
-POWER_AUTOMATE_LIVE_WEBHOOK_URL=
+POWER_AUTOMATE_LIVE_WEBHOOK_URL="Your webhook url of pwerautomate for sending email
 ```
 
 Run backend:
