@@ -50,19 +50,35 @@ export default function Dashboard() {
         setLoading(true);
         setError('');
         try {
-            const baseParams = isViewer ? { status: 'published' } : {};
-            const recentRes = await pocService.getAll({ page: 1, limit: 5, ...baseParams });
-            const pocs = recentRes.data.pocs;
-            const total = recentRes.data.pagination.total;
+            const loadAllPages = async (params = {}) => {
+                const firstRes = await pocService.getAll({ page: 1, limit: 100, ...params });
+                const firstData = firstRes.data;
+                let items = firstData.pocs || [];
+                const pages = firstData.pagination?.pages || 1;
+                for (let page = 2; page <= pages; page += 1) {
+                    const res = await pocService.getAll({ page, limit: 100, ...params });
+                    items = items.concat(res.data.pocs || []);
+                }
+                return items;
+            };
 
-            const firstTrackPageRes = await pocService.getAll({ page: 1, limit: 100, ...baseParams });
-            const firstTrackPageData = firstTrackPageRes.data;
-            let allTrackPocs = firstTrackPageData.pocs || [];
-            const pages = firstTrackPageData.pagination?.pages || 1;
-            for (let page = 2; page <= pages; page += 1) {
-                const res = await pocService.getAll({ page, limit: 100, ...baseParams });
-                allTrackPocs = allTrackPocs.concat(res.data.pocs || []);
+            let allTrackPocs = [];
+            if (isViewer) {
+                const defaultVisible = await loadAllPages();
+                const liveVisible = await loadAllPages({ status: 'live' });
+                const merged = new Map();
+                [...defaultVisible, ...liveVisible].forEach((item) => {
+                    if (item?._id) merged.set(item._id, item);
+                });
+                allTrackPocs = Array.from(merged.values());
+            } else {
+                allTrackPocs = await loadAllPages();
             }
+
+            const total = allTrackPocs.length;
+            const pocs = [...allTrackPocs]
+                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                .slice(0, 5);
 
             const computedTrackStats = buildEmptyTrackStats();
             let published = 0;
