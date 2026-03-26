@@ -38,9 +38,9 @@ export default function MyCredits() {
         <div className="space-y-5">
             <Card hover={false} className="p-5">
                 <h1 className="text-2xl sm:text-3xl font-bold text-charcoal-800">My Credits</h1>
-                <p className="text-sm text-charcoal-500 mt-1">
-                    Base impact rules: High {creditRules.High}, Medium {creditRules.Medium}, Low {creditRules.Low}. Credits gained use harmonic with hours spent.
-                </p>
+                {/* <p className="text-sm text-charcoal-500 mt-1">
+                    Base impact rules: High {creditRules.High}, Medium {creditRules.Medium}, Low {creditRules.Low}. Weighted credits use 50% impact, 30% admin stars, and direct 20% of invested hours.
+                </p> */}
                 <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3">
                         <p className="text-xs uppercase tracking-wide text-violet-700">Total Credits</p>

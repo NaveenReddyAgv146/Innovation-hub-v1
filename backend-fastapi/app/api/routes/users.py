@@ -21,6 +21,12 @@ VALID_TRACKS = {
     "GTM/Sales",
     "Organizational Building & Thought Leadership",
 }
+IMPACT_CREDITS = {"High": 10, "Medium": 7, "Low": 5}
+WEIGHT_IMPACT = 0.50
+WEIGHT_STARS = 0.30
+WEIGHT_HOURS = 0.20
+DEFAULT_STAR_RATING = 3.0
+BASE_POINTS_PER_FINISHED_INNOVATION = 10.0
 
 
 def _normalize_datetime(value: Any) -> datetime | None:
@@ -59,10 +65,37 @@ def _elapsed_seconds_for_finished_contribution(poc: dict[str, Any], user_id: str
     return max(0, int((finished_at - start_at).total_seconds()))
 
 
-def _harmonic_mean(a: float, b: float) -> float:
-    if a <= 0 or b <= 0:
+def _normalize_ratio(value: float, max_value: float) -> float:
+    if max_value <= 0:
         return 0.0
-    return (2.0 * a * b) / (a + b)
+    clipped = min(max(value, 0.0), max_value)
+    return clipped / max_value
+
+
+def _extract_avg_star_rating_for_user(poc: dict[str, Any], user_id: str) -> float | None:
+    ratings: list[float] = []
+    for item in (poc.get("adminFeedbacks") or []):
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("userId") or "") != user_id:
+            continue
+        rating = item.get("rating")
+        if isinstance(rating, (int, float)):
+            value = float(rating)
+            if 1.0 <= value <= 5.0:
+                ratings.append(value)
+    if not ratings:
+        return None
+    return sum(ratings) / len(ratings)
+
+
+def _weighted_credit_breakdown(impact_credit: float, star_rating: float, hours_spent: float) -> tuple[float, float, float, float]:
+    impact_component = BASE_POINTS_PER_FINISHED_INNOVATION * WEIGHT_IMPACT * _normalize_ratio(impact_credit, 10.0)
+    stars_component = BASE_POINTS_PER_FINISHED_INNOVATION * WEIGHT_STARS * _normalize_ratio(star_rating, 5.0)
+    # Hours contribution is direct 20% of invested hours (no cap normalization).
+    hours_component = WEIGHT_HOURS * max(0.0, float(hours_spent))
+    total = impact_component + stars_component + hours_component
+    return impact_component, stars_component, hours_component, total
 
 
 def validate_admin_track(role: str, email: str, admin_scope: str | None, admin_track: str | None) -> str | None:
@@ -236,7 +269,13 @@ async def get_contribution_leaderboard(
         effective_track = ""
     else:
         effective_track = requested_track or admin_track
-    impact_credits = {"High": 10, "Medium": 7, "Low": 5}
+    credit_rules = {
+        **IMPACT_CREDITS,
+        "weights": {"impact": 50, "stars": 30, "hours": 20},
+        "hoursCapForFullScore": None,
+        "defaultStarRating": DEFAULT_STAR_RATING,
+        "basePointsPerFinishedInnovation": int(BASE_POINTS_PER_FINISHED_INNOVATION),
+    }
     query: dict[str, Any] = {"status": "finished"}
     if effective_track:
         query["track"] = effective_track
@@ -250,6 +289,7 @@ async def get_contribution_leaderboard(
             "creditsAwardedUserIds": 1,
             "liveAt": 1,
             "finishedAt": 1,
+            "adminFeedbacks": 1,
         },
     ).to_list(length=None)
 
@@ -257,7 +297,7 @@ async def get_contribution_leaderboard(
     user_object_ids: set[ObjectId] = set()
     for poc in pocs:
         impact = str(poc.get("impact") or "").strip()
-        credits = impact_credits.get(impact, 0)
+        credits = IMPACT_CREDITS.get(impact, 0)
         awarded_ids = poc.get("creditsAwardedUserIds") or []
         approved_ids = poc.get("approvedUsers") or []
         source_ids = awarded_ids if awarded_ids else approved_ids
@@ -285,6 +325,12 @@ async def get_contribution_leaderboard(
                     "mediumImpactCount": 0,
                     "lowImpactCount": 0,
                     "totalHoursSpent": 0.0,
+                    "totalStarsGiven": 0.0,
+                    "ratedContributions": 0,
+                    "totalCredits": 0.0,
+                    "impactCreditsContribution": 0.0,
+                    "starCreditsContribution": 0.0,
+                    "hourCreditsContribution": 0.0,
                 },
             )
             row["totalImpactCredits"] += credits
@@ -296,12 +342,26 @@ async def get_contribution_leaderboard(
             elif impact == "Low":
                 row["lowImpactCount"] += 1
             elapsed_seconds = _elapsed_seconds_for_finished_contribution(poc, user_id_str)
-            row["totalHoursSpent"] += elapsed_seconds / 3600.0
+            hours_spent = elapsed_seconds / 3600.0
+            row["totalHoursSpent"] += hours_spent
+            star_rating = _extract_avg_star_rating_for_user(poc, user_id_str)
+            if star_rating is None:
+                star_rating = DEFAULT_STAR_RATING
+            else:
+                row["totalStarsGiven"] += star_rating
+                row["ratedContributions"] += 1
+            impact_component, stars_component, hours_component, total = _weighted_credit_breakdown(
+                float(credits), float(star_rating), float(hours_spent)
+            )
+            row["impactCreditsContribution"] += impact_component
+            row["starCreditsContribution"] += stars_component
+            row["hourCreditsContribution"] += hours_component
+            row["totalCredits"] += total
 
     if not aggregates:
         return {
             "leaderboard": [],
-            "creditRules": impact_credits,
+            "creditRules": credit_rules,
             "scope": effective_track or "all",
         }
 
@@ -318,8 +378,12 @@ async def get_contribution_leaderboard(
             continue
         total_impact_credits = int(row["totalImpactCredits"])
         total_hours = float(row["totalHoursSpent"])
-        harmonic_score = _harmonic_mean(float(total_impact_credits), total_hours)
-        credits_gained = round(harmonic_score, 2)
+        credits_gained = round(float(row["totalCredits"]), 2)
+        avg_star_rating = (
+            round(float(row["totalStarsGiven"]) / int(row["ratedContributions"]), 2)
+            if int(row["ratedContributions"]) > 0
+            else DEFAULT_STAR_RATING
+        )
         rows.append(
             {
                 "user": {
@@ -332,6 +396,10 @@ async def get_contribution_leaderboard(
                 "totalCredits": credits_gained,
                 "impactCreditsBase": total_impact_credits,
                 "totalHoursSpent": round(total_hours, 2),
+                "averageStarRating": avg_star_rating,
+                "impactCreditsContribution": round(float(row["impactCreditsContribution"]), 2),
+                "starCreditsContribution": round(float(row["starCreditsContribution"]), 2),
+                "hourCreditsContribution": round(float(row["hourCreditsContribution"]), 2),
                 "finishedContributions": int(row["finishedContributions"]),
                 "highImpactCount": int(row["highImpactCount"]),
                 "mediumImpactCount": int(row["mediumImpactCount"]),
@@ -351,7 +419,7 @@ async def get_contribution_leaderboard(
         row["rank"] = index
     return {
         "leaderboard": rows,
-        "creditRules": impact_credits,
+        "creditRules": credit_rules,
         "scope": effective_track or "all",
     }
 
@@ -394,7 +462,13 @@ async def get_my_credits(
 
     current_user_id = ObjectId(current_user["id"])
     current_user_id_str = str(current_user_id)
-    impact_credits = {"High": 10, "Medium": 7, "Low": 5}
+    credit_rules = {
+        **IMPACT_CREDITS,
+        "weights": {"impact": 50, "stars": 30, "hours": 20},
+        "hoursCapForFullScore": None,
+        "defaultStarRating": DEFAULT_STAR_RATING,
+        "basePointsPerFinishedInnovation": int(BASE_POINTS_PER_FINISHED_INNOVATION),
+    }
 
     pocs = await db.pocs.find(
         {
@@ -410,6 +484,7 @@ async def get_my_credits(
             "approvedDetails": 1,
             "liveAt": 1,
             "finishedAt": 1,
+            "adminFeedbacks": 1,
         },
     ).to_list(length=None)
 
@@ -417,10 +492,15 @@ async def get_my_credits(
     for poc in pocs:
         track = str(poc.get("track") or "").strip() or "Unknown"
         impact = str(poc.get("impact") or "").strip()
-        impact_credit = impact_credits.get(impact, 0)
+        impact_credit = IMPACT_CREDITS.get(impact, 0)
         elapsed_seconds = _elapsed_seconds_for_finished_contribution(poc, current_user_id_str)
         hours_spent = elapsed_seconds / 3600.0
-        harmonic_credit = _harmonic_mean(float(impact_credit), hours_spent)
+        star_rating = _extract_avg_star_rating_for_user(poc, current_user_id_str)
+        if star_rating is None:
+            star_rating = DEFAULT_STAR_RATING
+        _impact_component, _stars_component, _hours_component, weighted_credit = _weighted_credit_breakdown(
+            float(impact_credit), float(star_rating), float(hours_spent)
+        )
 
         row = track_map.setdefault(
             track,
@@ -433,7 +513,7 @@ async def get_my_credits(
                 "lowImpactCount": 0,
             },
         )
-        row["credits"] += harmonic_credit
+        row["credits"] += weighted_credit
         row["finishedContributions"] += 1
         if impact == "High":
             row["highImpactCount"] += 1
@@ -456,7 +536,7 @@ async def get_my_credits(
             "finishedContributions": total_finished,
             "tracksContributed": len(rows),
         },
-        "creditRules": impact_credits,
+        "creditRules": credit_rules,
         "tracks": rows,
     }
 

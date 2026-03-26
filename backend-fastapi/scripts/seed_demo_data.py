@@ -1022,6 +1022,46 @@ def build_user_ids(db, user_ids: dict[str, ObjectId], emails: list[str]) -> list
     return ids
 
 
+def build_seed_admin_feedbacks(
+    db,
+    user_ids: dict[str, ObjectId],
+    impact: str,
+    approved_users: list[ObjectId],
+    finished_at: datetime | None,
+    now: datetime,
+) -> list[dict]:
+    if not approved_users:
+        return []
+
+    admin_email = settings.super_admin_email.strip().lower()
+    given_by_id = resolve_user_id(db, user_ids, admin_email)
+    if not given_by_id:
+        return []
+    given_by_doc = db.users.find_one({"_id": given_by_id}, {"name": 1, "email": 1}) or {}
+
+    base_rating = {"High": 5, "Medium": 4, "Low": 3}.get(impact, 3)
+    feedback_time = finished_at or now
+    feedbacks: list[dict] = []
+    for idx, user_id in enumerate(approved_users):
+        user_doc = db.users.find_one({"_id": user_id}, {"name": 1, "email": 1}) or {}
+        rating = max(1, min(5, base_rating - (idx % 2)))
+        feedbacks.append(
+            {
+                "userId": user_id,
+                "userName": str(user_doc.get("name") or "").strip(),
+                "userEmail": str(user_doc.get("email") or "").strip(),
+                "feedback": f"Seeded performance review for contribution execution. Rating: {rating}/5.",
+                "rating": rating,
+                "givenById": given_by_id,
+                "givenByName": str(given_by_doc.get("name") or "Admin").strip(),
+                "givenByEmail": str(given_by_doc.get("email") or admin_email).strip(),
+                "createdAt": feedback_time,
+                "updatedAt": feedback_time,
+            }
+        )
+    return feedbacks
+
+
 def main() -> None:
     client = MongoClient(settings.mongodb_uri)
     db = client[settings.mongodb_db_name]
@@ -1059,6 +1099,11 @@ def main() -> None:
             finished_at = updated_at
         votes, interest_details = build_interest_details_with_lookup(db, user_ids, poc["interestEmails"])
         approved_users = build_user_ids(db, user_ids, poc.get("approvedEmails", []))
+        admin_feedbacks = (
+            build_seed_admin_feedbacks(db, user_ids, poc["impact"], approved_users, finished_at, now)
+            if poc["status"] == "finished"
+            else []
+        )
         approved_details = []
         approved_at_base = live_at or created_at
         for idx, approved_user_id in enumerate(approved_users):
@@ -1101,6 +1146,7 @@ def main() -> None:
             "creditsPerUser": credits_per_user if poc["status"] == "finished" else 0,
             "creditsAwardedUserCount": len(approved_users) if poc["status"] == "finished" else 0,
             "creditsAwardedUserIds": approved_users if poc["status"] == "finished" else [],
+            "adminFeedbacks": admin_feedbacks,
             "author": user_ids[poc["authorEmail"]],
             "createdAt": created_at,
             "updatedAt": updated_at,
