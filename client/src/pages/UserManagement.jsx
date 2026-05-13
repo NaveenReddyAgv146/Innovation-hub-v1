@@ -57,6 +57,7 @@ export default function UserManagement() {
         employeeId: '',
         adminScope: 'track',
         adminTrack: '',
+        band: '',
     });
     const [formError, setFormError] = useState('');
     const [saving, setSaving] = useState(false);
@@ -95,6 +96,7 @@ export default function UserManagement() {
             employeeId: '',
             adminScope: 'track',
             adminTrack: '',
+            band: '',
         });
         setFormError('');
         setModalOpen(true);
@@ -113,6 +115,7 @@ export default function UserManagement() {
             employeeId: user.employeeId || '',
             adminScope: user.adminTrack ? 'track' : 'global',
             adminTrack: user.adminTrack || '',
+            band: user.band || '',
         });
         setFormError('');
         setModalOpen(true);
@@ -154,6 +157,7 @@ export default function UserManagement() {
             if (!payload.employeeId) delete payload.employeeId;
             if (payload.adminTrack === null) delete payload.adminTrack;
             if (payload.adminScope === null) delete payload.adminScope;
+            if (!payload.band) delete payload.band;
             if (editUser) {
                 if (!payload.password) delete payload.password;
                 await userService.update(editUser._id, payload);
@@ -377,6 +381,21 @@ export default function UserManagement() {
                             onChange={(e) => setFormData({ ...formData, employeeId: e.target.value })}
                             required
                         />
+                    )}
+                    {formData.role !== 'admin' && (
+                        <div className="space-y-1.5">
+                            <label className="block text-sm font-medium text-charcoal-700">Band</label>
+                            <select
+                                value={formData.band}
+                                onChange={(e) => setFormData({ ...formData, band: e.target.value })}
+                                className="w-full rounded-xl border border-sand-300 bg-white px-4 py-2.5 text-sm text-charcoal-800 focus:border-terracotta-400 focus:ring-2 focus:ring-terracotta-100 focus:outline-none transition-all duration-200"
+                            >
+                                <option value="">Select band</option>
+                                {['A1', 'A2', 'A3', 'A4', 'A5', 'A6'].map((b) => (
+                                    <option key={b} value={b}>{b}</option>
+                                ))}
+                            </select>
+                        </div>
                     )}
                     <div className="flex gap-3 pt-2">
                         <Button type="submit" loading={saving}>

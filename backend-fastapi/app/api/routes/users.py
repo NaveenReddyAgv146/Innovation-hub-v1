@@ -1,3 +1,4 @@
+import math
 from datetime import datetime, timezone
 from typing import Any
 
@@ -21,81 +22,61 @@ VALID_TRACKS = {
     "GTM/Sales",
     "Organizational Building & Thought Leadership",
 }
-IMPACT_CREDITS = {"High": 10, "Medium": 7, "Low": 5}
-WEIGHT_IMPACT = 0.50
-WEIGHT_STARS = 0.30
-WEIGHT_HOURS = 0.20
-DEFAULT_STAR_RATING = 3.0
-BASE_POINTS_PER_FINISHED_INNOVATION = 10.0
+
+# Contribution Score formula constants (verified against worked examples)
+IMPACT_SCORES: dict[str, float] = {"High": 1.0, "Medium": 0.6, "Low": 0.3}
+COMPLEXITY_SCORES: dict[str, float] = {"High": 1.0, "Medium": 0.7, "Low": 0.4}
+FEEDBACK_SCORES: dict[str, float] = {"Exceeds": 1.0, "Meets": 0.7, "Does Not Meet": 0.0}
+BAND_MULTIPLIERS: dict[str, float] = {"A1": 0.8, "A2": 0.9, "A3": 1.0, "A4": 1.1, "A5": 1.2, "A6": 1.5}
+MAX_HOURS = 10.0
+DEFAULT_PERFORMANCE_CATEGORY = "Meets"
+DEFAULT_BAND = "A3"
+
+SCORE_LABELS = [
+    (0.85, "Outstanding"),
+    (0.70, "Strong"),
+    (0.50, "Solid"),
+    (0.0,  "Needs Improvement"),
+]
 
 
-def _normalize_datetime(value: Any) -> datetime | None:
-    if not isinstance(value, datetime):
-        return None
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
+def score_label(score: float) -> str:
+    for threshold, label in SCORE_LABELS:
+        if score >= threshold:
+            return label
+    return "Needs Improvement"
 
 
-def _extract_approved_at_for_user(poc: dict[str, Any], user_id: str) -> datetime | None:
-    approved_details = poc.get("approvedDetails") or []
-    if not isinstance(approved_details, list):
-        return None
-    for item in approved_details:
-        if not isinstance(item, dict):
-            continue
-        if str(item.get("userId")) != user_id:
-            continue
-        return _normalize_datetime(item.get("approvedAt"))
-    return None
-
-
-def _elapsed_seconds_for_finished_contribution(poc: dict[str, Any], user_id: str) -> int:
-    live_at = _normalize_datetime(poc.get("liveAt"))
-    finished_at = _normalize_datetime(poc.get("finishedAt"))
-    approved_at = _extract_approved_at_for_user(poc, user_id)
-    if not finished_at:
-        return 0
-    if live_at and approved_at:
-        start_at = live_at if live_at >= approved_at else approved_at
-    else:
-        start_at = live_at or approved_at
-    if not start_at:
-        return 0
-    return max(0, int((finished_at - start_at).total_seconds()))
-
-
-def _normalize_ratio(value: float, max_value: float) -> float:
-    if max_value <= 0:
+def compute_contribution_score(
+    impact: str,
+    complexity: str,
+    performance_category: str,
+    hours: float,
+    band: str,
+) -> float:
+    if performance_category == "Does Not Meet":
         return 0.0
-    clipped = min(max(value, 0.0), max_value)
-    return clipped / max_value
+    I = IMPACT_SCORES.get(impact, 0.0)
+    C = COMPLEXITY_SCORES.get(complexity, 0.0)
+    F = FEEDBACK_SCORES.get(performance_category, 0.0)
+    band_mult = BAND_MULTIPLIERS.get(band or DEFAULT_BAND, 1.0)
+    value = (0.4 * I + 0.3 * C + 0.3 * F) ** 1.2
+    effort = math.log(1 + min(float(hours), 100.0)) / math.log(1 + MAX_HOURS)
+    return (value * effort) / band_mult
 
 
-def _extract_avg_star_rating_for_user(poc: dict[str, Any], user_id: str) -> float | None:
-    ratings: list[float] = []
+def _extract_performance_category_for_user(poc: dict[str, Any], user_id: str) -> str:
+    latest: dict[str, Any] | None = None
     for item in (poc.get("adminFeedbacks") or []):
         if not isinstance(item, dict):
             continue
         if str(item.get("userId") or "") != user_id:
             continue
-        rating = item.get("rating")
-        if isinstance(rating, (int, float)):
-            value = float(rating)
-            if 1.0 <= value <= 5.0:
-                ratings.append(value)
-    if not ratings:
-        return None
-    return sum(ratings) / len(ratings)
-
-
-def _weighted_credit_breakdown(impact_credit: float, star_rating: float, hours_spent: float) -> tuple[float, float, float, float]:
-    impact_component = BASE_POINTS_PER_FINISHED_INNOVATION * WEIGHT_IMPACT * _normalize_ratio(impact_credit, 10.0)
-    stars_component = BASE_POINTS_PER_FINISHED_INNOVATION * WEIGHT_STARS * _normalize_ratio(star_rating, 5.0)
-    # Hours contribution is direct 20% of invested hours (no cap normalization).
-    hours_component = WEIGHT_HOURS * max(0.0, float(hours_spent))
-    total = impact_component + stars_component + hours_component
-    return impact_component, stars_component, hours_component, total
+        cat = item.get("performanceCategory")
+        if cat in FEEDBACK_SCORES:
+            if latest is None or (item.get("updatedAt") or item.get("createdAt", datetime.min)) >= (latest.get("updatedAt") or latest.get("createdAt", datetime.min)):
+                latest = item
+    return str(latest["performanceCategory"]) if latest else DEFAULT_PERFORMANCE_CATEGORY
 
 
 def validate_admin_track(role: str, email: str, admin_scope: str | None, admin_track: str | None) -> str | None:
@@ -269,38 +250,36 @@ async def get_contribution_leaderboard(
         effective_track = ""
     else:
         effective_track = requested_track or admin_track
-    credit_rules = {
-        **IMPACT_CREDITS,
-        "weights": {"impact": 50, "stars": 30, "hours": 20},
-        "hoursCapForFullScore": None,
-        "defaultStarRating": DEFAULT_STAR_RATING,
-        "basePointsPerFinishedInnovation": int(BASE_POINTS_PER_FINISHED_INNOVATION),
-    }
+
     query: dict[str, Any] = {"status": "finished"}
     if effective_track:
         query["track"] = effective_track
 
     pocs = await db.pocs.find(
         query,
-        {
-            "impact": 1,
-            "approvedUsers": 1,
-            "approvedDetails": 1,
-            "creditsAwardedUserIds": 1,
-            "liveAt": 1,
-            "finishedAt": 1,
-            "adminFeedbacks": 1,
-        },
+        {"impact": 1, "complexity": 1, "approvedUsers": 1, "creditsAwardedUserIds": 1, "adminFeedbacks": 1},
     ).to_list(length=None)
+
+    if not pocs:
+        return {"leaderboard": [], "scope": effective_track or "all"}
+
+    poc_oids = [poc["_id"] for poc in pocs if isinstance(poc.get("_id"), ObjectId)]
+    hours_agg = await db.contribution_hours.aggregate([
+        {"$match": {"pocId": {"$in": poc_oids}, "startTime": {"$exists": True}}},
+        {"$group": {"_id": {"pocId": "$pocId", "userId": "$userId"}, "totalHours": {"$sum": "$hours"}}},
+    ]).to_list(None)
+    hours_map: dict[tuple[str, str], float] = {
+        (str(e["_id"]["pocId"]), str(e["_id"]["userId"])): float(e["totalHours"])
+        for e in hours_agg
+    }
 
     aggregates: dict[str, dict[str, Any]] = {}
     user_object_ids: set[ObjectId] = set()
     for poc in pocs:
+        poc_id_str = str(poc.get("_id"))
         impact = str(poc.get("impact") or "").strip()
-        credits = IMPACT_CREDITS.get(impact, 0)
-        awarded_ids = poc.get("creditsAwardedUserIds") or []
-        approved_ids = poc.get("approvedUsers") or []
-        source_ids = awarded_ids if awarded_ids else approved_ids
+        complexity = str(poc.get("complexity") or "Medium").strip()
+        source_ids = poc.get("creditsAwardedUserIds") or poc.get("approvedUsers") or []
         seen_in_poc: set[str] = set()
         for value in source_ids:
             user_obj_id: ObjectId | None = None
@@ -315,59 +294,33 @@ async def get_contribution_leaderboard(
                 continue
             seen_in_poc.add(user_id_str)
             user_object_ids.add(user_obj_id)
-            row = aggregates.setdefault(
-                user_id_str,
-                {
-                    "userId": user_obj_id,
-                    "totalImpactCredits": 0,
-                    "finishedContributions": 0,
-                    "highImpactCount": 0,
-                    "mediumImpactCount": 0,
-                    "lowImpactCount": 0,
-                    "totalHoursSpent": 0.0,
-                    "totalStarsGiven": 0.0,
-                    "ratedContributions": 0,
-                    "totalCredits": 0.0,
-                    "impactCreditsContribution": 0.0,
-                    "starCreditsContribution": 0.0,
-                    "hourCreditsContribution": 0.0,
-                },
-            )
-            row["totalImpactCredits"] += credits
+            row = aggregates.setdefault(user_id_str, {
+                "userId": user_obj_id,
+                "finishedContributions": 0,
+                "highImpactCount": 0,
+                "mediumImpactCount": 0,
+                "lowImpactCount": 0,
+                "totalHoursLogged": 0.0,
+                "pocScores": [],
+            })
+            hours = hours_map.get((poc_id_str, user_id_str), 0.0)
+            performance_category = _extract_performance_category_for_user(poc, user_id_str)
             row["finishedContributions"] += 1
+            row["totalHoursLogged"] += hours
             if impact == "High":
                 row["highImpactCount"] += 1
             elif impact == "Medium":
                 row["mediumImpactCount"] += 1
             elif impact == "Low":
                 row["lowImpactCount"] += 1
-            elapsed_seconds = _elapsed_seconds_for_finished_contribution(poc, user_id_str)
-            hours_spent = elapsed_seconds / 3600.0
-            row["totalHoursSpent"] += hours_spent
-            star_rating = _extract_avg_star_rating_for_user(poc, user_id_str)
-            if star_rating is None:
-                star_rating = DEFAULT_STAR_RATING
-            else:
-                row["totalStarsGiven"] += star_rating
-                row["ratedContributions"] += 1
-            impact_component, stars_component, hours_component, total = _weighted_credit_breakdown(
-                float(credits), float(star_rating), float(hours_spent)
-            )
-            row["impactCreditsContribution"] += impact_component
-            row["starCreditsContribution"] += stars_component
-            row["hourCreditsContribution"] += hours_component
-            row["totalCredits"] += total
+            row["pocScores"].append({"impact": impact, "complexity": complexity, "performanceCategory": performance_category, "hours": hours})
 
     if not aggregates:
-        return {
-            "leaderboard": [],
-            "creditRules": credit_rules,
-            "scope": effective_track or "all",
-        }
+        return {"leaderboard": [], "scope": effective_track or "all"}
 
     user_docs = await db.users.find(
         {"_id": {"$in": list(user_object_ids)}},
-        {"name": 1, "email": 1, "role": 1, "employeeId": 1},
+        {"name": 1, "email": 1, "role": 1, "employeeId": 1, "band": 1},
     ).to_list(length=len(user_object_ids))
     users_by_id = {str(doc["_id"]): doc for doc in user_docs}
 
@@ -376,52 +329,43 @@ async def get_contribution_leaderboard(
         user_doc = users_by_id.get(key)
         if not user_doc:
             continue
-        total_impact_credits = int(row["totalImpactCredits"])
-        total_hours = float(row["totalHoursSpent"])
-        credits_gained = round(float(row["totalCredits"]), 2)
-        avg_star_rating = (
-            round(float(row["totalStarsGiven"]) / int(row["ratedContributions"]), 2)
-            if int(row["ratedContributions"]) > 0
-            else DEFAULT_STAR_RATING
+        band = str(user_doc.get("band") or DEFAULT_BAND)
+        total_score = sum(
+            compute_contribution_score(ps["impact"], ps["complexity"], ps["performanceCategory"], ps["hours"], band)
+            for ps in row["pocScores"]
         )
-        rows.append(
-            {
-                "user": {
-                    "_id": str(user_doc["_id"]),
-                    "name": user_doc.get("name"),
-                    "email": user_doc.get("email"),
-                    "role": user_doc.get("role"),
-                    "employeeId": user_doc.get("employeeId", ""),
-                },
-                "totalCredits": credits_gained,
-                "impactCreditsBase": total_impact_credits,
-                "totalHoursSpent": round(total_hours, 2),
-                "averageStarRating": avg_star_rating,
-                "impactCreditsContribution": round(float(row["impactCreditsContribution"]), 2),
-                "starCreditsContribution": round(float(row["starCreditsContribution"]), 2),
-                "hourCreditsContribution": round(float(row["hourCreditsContribution"]), 2),
-                "finishedContributions": int(row["finishedContributions"]),
-                "highImpactCount": int(row["highImpactCount"]),
-                "mediumImpactCount": int(row["mediumImpactCount"]),
-                "lowImpactCount": int(row["lowImpactCount"]),
-            }
-        )
+        n = int(row["finishedContributions"])
+        avg_score = total_score / n if n > 0 else 0.0
+        rows.append({
+            "user": {
+                "_id": str(user_doc["_id"]),
+                "name": user_doc.get("name"),
+                "email": user_doc.get("email"),
+                "role": user_doc.get("role"),
+                "employeeId": user_doc.get("employeeId", ""),
+                "band": band,
+            },
+            "totalScore": round(total_score, 4),
+            "averageScore": round(avg_score, 4),
+            "scoreLabel": score_label(avg_score),
+            "totalHoursLogged": round(float(row["totalHoursLogged"]), 2),
+            "finishedContributions": n,
+            "highImpactCount": int(row["highImpactCount"]),
+            "mediumImpactCount": int(row["mediumImpactCount"]),
+            "lowImpactCount": int(row["lowImpactCount"]),
+        })
 
     if sort_by == "credits":
-        rows.sort(key=lambda item: (item["totalCredits"], item["finishedContributions"], item["totalHoursSpent"]), reverse=True)
+        rows.sort(key=lambda item: (item["totalScore"], item["finishedContributions"]), reverse=True)
     elif sort_by == "finished":
-        rows.sort(key=lambda item: (item["finishedContributions"], item["totalCredits"], item["totalHoursSpent"]), reverse=True)
+        rows.sort(key=lambda item: (item["finishedContributions"], item["totalScore"]), reverse=True)
     else:
-        rows.sort(key=lambda item: (item["totalCredits"], item["finishedContributions"], item["totalHoursSpent"]), reverse=True)
+        rows.sort(key=lambda item: (item["totalScore"], item["finishedContributions"]), reverse=True)
 
     rows = rows[:limit]
     for index, row in enumerate(rows, start=1):
         row["rank"] = index
-    return {
-        "leaderboard": rows,
-        "creditRules": credit_rules,
-        "scope": effective_track or "all",
-    }
+    return {"leaderboard": rows, "scope": effective_track or "all"}
 
 
 @router.get("/directory")
@@ -462,13 +406,9 @@ async def get_my_credits(
 
     current_user_id = ObjectId(current_user["id"])
     current_user_id_str = str(current_user_id)
-    credit_rules = {
-        **IMPACT_CREDITS,
-        "weights": {"impact": 50, "stars": 30, "hours": 20},
-        "hoursCapForFullScore": None,
-        "defaultStarRating": DEFAULT_STAR_RATING,
-        "basePointsPerFinishedInnovation": int(BASE_POINTS_PER_FINISHED_INNOVATION),
-    }
+
+    user_doc = await db.users.find_one({"_id": current_user_id}, {"band": 1})
+    band = str((user_doc or {}).get("band") or DEFAULT_BAND)
 
     pocs = await db.pocs.find(
         {
@@ -478,42 +418,52 @@ async def get_my_credits(
                 {"creditsAwardedUserIds": current_user_id},
             ],
         },
-        {
-            "track": 1,
-            "impact": 1,
-            "approvedDetails": 1,
-            "liveAt": 1,
-            "finishedAt": 1,
-            "adminFeedbacks": 1,
-        },
+        {"track": 1, "impact": 1, "complexity": 1, "adminFeedbacks": 1},
     ).to_list(length=None)
 
+    if not pocs:
+        return {
+            "summary": {
+                "totalScore": 0.0,
+                "scoreLabel": score_label(0.0),
+                "finishedContributions": 0,
+                "tracksContributed": 0,
+                "band": band,
+            },
+            "tracks": [],
+        }
+
+    poc_oids = [poc["_id"] for poc in pocs if isinstance(poc.get("_id"), ObjectId)]
+    hours_agg = await db.contribution_hours.aggregate([
+        {"$match": {"pocId": {"$in": poc_oids}, "userId": current_user_id, "startTime": {"$exists": True}}},
+        {"$group": {"_id": "$pocId", "totalHours": {"$sum": "$hours"}}},
+    ]).to_list(None)
+    hours_by_poc: dict[str, float] = {str(e["_id"]): float(e["totalHours"]) for e in hours_agg}
+
     track_map: dict[str, dict[str, Any]] = {}
+    all_scores: list[float] = []
     for poc in pocs:
+        poc_id_str = str(poc["_id"])
         track = str(poc.get("track") or "").strip() or "Unknown"
         impact = str(poc.get("impact") or "").strip()
-        impact_credit = IMPACT_CREDITS.get(impact, 0)
-        elapsed_seconds = _elapsed_seconds_for_finished_contribution(poc, current_user_id_str)
-        hours_spent = elapsed_seconds / 3600.0
-        star_rating = _extract_avg_star_rating_for_user(poc, current_user_id_str)
-        if star_rating is None:
-            star_rating = DEFAULT_STAR_RATING
-        _impact_component, _stars_component, _hours_component, weighted_credit = _weighted_credit_breakdown(
-            float(impact_credit), float(star_rating), float(hours_spent)
-        )
+        complexity = str(poc.get("complexity") or "Medium").strip()
+        performance_category = _extract_performance_category_for_user(poc, current_user_id_str)
+        hours = hours_by_poc.get(poc_id_str, 0.0)
+        contrib_score = compute_contribution_score(impact, complexity, performance_category, hours, band)
+        all_scores.append(contrib_score)
 
         row = track_map.setdefault(
             track,
             {
                 "track": track,
-                "credits": 0.0,
+                "totalScore": 0.0,
                 "finishedContributions": 0,
                 "highImpactCount": 0,
                 "mediumImpactCount": 0,
                 "lowImpactCount": 0,
             },
         )
-        row["credits"] += weighted_credit
+        row["totalScore"] += contrib_score
         row["finishedContributions"] += 1
         if impact == "High":
             row["highImpactCount"] += 1
@@ -524,19 +474,21 @@ async def get_my_credits(
 
     rows = list(track_map.values())
     for row in rows:
-        row["credits"] = round(float(row["credits"]), 2)
-    rows.sort(key=lambda row: (float(row.get("credits") or 0), int(row.get("finishedContributions") or 0), str(row.get("track") or "")), reverse=True)
+        row["totalScore"] = round(float(row["totalScore"]), 4)
+    rows.sort(key=lambda row: (float(row.get("totalScore") or 0), int(row.get("finishedContributions") or 0), str(row.get("track") or "")), reverse=True)
 
-    total_credits = round(sum(float(row.get("credits") or 0) for row in rows), 2)
+    total_score = round(sum(all_scores), 4)
     total_finished = sum(int(row.get("finishedContributions") or 0) for row in rows)
+    avg_score = total_score / total_finished if total_finished > 0 else 0.0
 
     return {
         "summary": {
-            "totalCredits": total_credits,
+            "totalScore": total_score,
+            "scoreLabel": score_label(avg_score),
             "finishedContributions": total_finished,
             "tracksContributed": len(rows),
+            "band": band,
         },
-        "creditRules": credit_rules,
         "tracks": rows,
     }
 
@@ -580,6 +532,7 @@ async def create_user(
         "password": hash_password(payload.password),
         "role": payload.role,
         "adminTrack": admin_track,
+        "band": payload.band,
         "contributionCredits": 0,
         "refreshToken": None,
         "createdAt": now,

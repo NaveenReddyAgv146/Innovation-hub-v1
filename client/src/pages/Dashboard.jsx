@@ -1,22 +1,25 @@
-﻿import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/authStore';
 import { pocService, userService } from '../services/endpoints';
 import Card from '../components/ui/Card';
-import Badge from '../components/ui/Badge';
 import Spinner from '../components/ui/Spinner';
 import ErrorState from '../components/ui/ErrorState';
 import Button from '../components/ui/Button';
+import Modal from '../components/ui/Modal';
+import Input from '../components/ui/Input';
 import { getThumbnailGradient } from '../utils/thumbnailGradient';
 import { getTrackIconSrc } from '../utils/trackIcons';
+import { hasTrackDashboardAccess, getAssignedAdminTrack } from '../utils/access';
 
-const getTitleWithTrack = (item = {}) => (item.track ? `${item.title} · ${item.track}` : item.title);
+const AVAILABILITY_UNITS = ['per day', 'per week'];
+
 const TRACKS = [
-    { key: 'Solutions', label: 'Solutions', icon: getTrackIconSrc('Solutions'), ringColor: '#1d4ed8', barClass: 'bg-blue-700' },
-    { key: 'Delivery', label: 'Delivery', icon: getTrackIconSrc('Delivery'), ringColor: '#dc2626', barClass: 'bg-red-600' },
-    { key: 'Learning', label: 'Learning', icon: getTrackIconSrc('Learning'), ringColor: '#7c3aed', barClass: 'bg-violet-600' },
-    { key: 'GTM/Sales', label: 'GTM/Sales', icon: getTrackIconSrc('GTM/Sales'), ringColor: '#ea580c', barClass: 'bg-orange-600' },
-    { key: 'Organizational Building & Thought Leadership', label: 'Thought Leadership', icon: getTrackIconSrc('Organizational Building & Thought Leadership'), ringColor: '#0f766e', barClass: 'bg-teal-700' },
+    { key: 'Solutions', label: 'Solutions', icon: getTrackIconSrc('Solutions'), ringColor: '#4f46e5', barClass: 'bg-indigo-600', iconBg: 'bg-indigo-600' },
+    { key: 'Delivery', label: 'Delivery', icon: getTrackIconSrc('Delivery'), ringColor: '#2563eb', barClass: 'bg-blue-600', iconBg: 'bg-blue-600' },
+    { key: 'Learning', label: 'Learning', icon: getTrackIconSrc('Learning'), ringColor: '#16a34a', barClass: 'bg-green-600', iconBg: 'bg-green-600' },
+    { key: 'GTM/Sales', label: 'GTM/Sales', icon: getTrackIconSrc('GTM/Sales'), ringColor: '#ea580c', barClass: 'bg-orange-500', iconBg: 'bg-orange-500' },
+    { key: 'Organizational Building & Thought Leadership', label: 'Thought Leadership', icon: getTrackIconSrc('Organizational Building & Thought Leadership'), ringColor: '#334155', barClass: 'bg-slate-700', iconBg: 'bg-slate-700' },
 ];
 const buildEmptyTrackStats = () =>
     TRACKS.reduce((acc, track) => {
@@ -24,27 +27,42 @@ const buildEmptyTrackStats = () =>
         return acc;
     }, {});
 
+const getHubStatusLabel = (status) => {
+    if (status === 'live') return 'Live';
+    if (status === 'published') return 'In Progress';
+    if (status === 'finished') return 'Finished';
+    return status;
+};
+
 export default function Dashboard() {
     const user = useAuthStore((s) => s.user);
     const navigate = useNavigate();
     const isViewer = user?.role === 'viewer';
+    const adminTrack = getAssignedAdminTrack(user);
+    const isTrackAdmin = !!adminTrack;
     const [stats, setStats] = useState({ total: 0, published: 0, live: 0, drafts: 0, finished: 0, cancelled: 0, interested: 0 });
-    const [animatedPublishedPct, setAnimatedPublishedPct] = useState(0);
-    const [animatedLivePct, setAnimatedLivePct] = useState(0);
-    const [animatedDraftPct, setAnimatedDraftPct] = useState(0);
-    const [animatedFinishedPct, setAnimatedFinishedPct] = useState(0);
-    const [animatedInterestedPct, setAnimatedInterestedPct] = useState(0);
     const [recentPocs, setRecentPocs] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [allPocs, setAllPocs] = useState([]);
     const [viewerInvolvedPocs, setViewerInvolvedPocs] = useState([]);
-    const [pipelineFilter, setPipelineFilter] = useState(null);
     const [trackStats, setTrackStats] = useState(buildEmptyTrackStats());
     const [topUsersByCredits, setTopUsersByCredits] = useState([]);
+    const [myCreditsData, setMyCreditsData] = useState(null);
+    const [fullLeaderboard, setFullLeaderboard] = useState([]);
+    const [viewerHubTab, setViewerHubTab] = useState('involved');
+    const [pendingApprovalsList, setPendingApprovalsList] = useState([]);
 
-    const pipelineResetTimerRef = useRef(null);
-    const animationFrameRef = useRef(null);
+    const [publishingId, setPublishingId] = useState(null);
+
+    const leaderboardSectionRef = useRef(null);
+
+    const [interestModalOpen, setInterestModalOpen] = useState(false);
+    const [interestingPoc, setInterestingPoc] = useState(null);
+    const [availabilityValue, setAvailabilityValue] = useState('');
+    const [availabilityUnit, setAvailabilityUnit] = useState('per week');
+    const [voting, setVoting] = useState(false);
+    const [interestError, setInterestError] = useState('');
 
     const fetchDashboard = useCallback(async () => {
         setLoading(true);
@@ -72,7 +90,14 @@ export default function Dashboard() {
                 });
                 allTrackPocs = Array.from(merged.values());
             } else {
-                allTrackPocs = await loadAllPages();
+                const [allResult, draftResult] = await Promise.all([
+                    loadAllPages(),
+                    loadAllPages({ status: 'draft' }),
+                ]);
+                allTrackPocs = allResult;
+                setPendingApprovalsList(
+                    [...draftResult].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+                );
             }
 
             const total = allTrackPocs.length;
@@ -108,6 +133,7 @@ export default function Dashboard() {
             setRecentPocs(pocs);
             setTrackStats(computedTrackStats);
             setAllPocs(allTrackPocs);
+
             if (isViewer) {
                 const firstInvolvedPageRes = await pocService.getAll({ page: 1, limit: 100, involved: true });
                 const firstInvolvedPageData = firstInvolvedPageRes.data;
@@ -118,11 +144,20 @@ export default function Dashboard() {
                     allInvolved = allInvolved.concat(res.data.pocs || []);
                 }
                 setViewerInvolvedPocs(allInvolved);
+
+                const [creditsRes, lbRes] = await Promise.all([
+                    userService.getMyCredits(),
+                    userService.getLeaderboard({ limit: 100, sortBy: 'credits', track: 'all' }),
+                ]);
+                setMyCreditsData(creditsRes.data);
+                const lb = lbRes.data?.leaderboard || [];
+                setFullLeaderboard(lb);
+                setTopUsersByCredits(lb.slice(0, 5));
             } else {
                 setViewerInvolvedPocs([]);
+                const leaderboardRes = await userService.getLeaderboard({ limit: 5, sortBy: 'credits', track: 'all' });
+                setTopUsersByCredits(leaderboardRes.data?.leaderboard || []);
             }
-            const leaderboardRes = await userService.getLeaderboard({ limit: 5, sortBy: 'credits', track: 'all' });
-            setTopUsersByCredits(leaderboardRes.data?.leaderboard || []);
         } catch {
             setError('Failed to load dashboard data');
         } finally {
@@ -132,305 +167,632 @@ export default function Dashboard() {
 
     useEffect(() => {
         fetchDashboard();
-        return () => {
-            if (pipelineResetTimerRef.current) clearTimeout(pipelineResetTimerRef.current);
-            if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-        };
     }, [fetchDashboard]);
-
-    useEffect(() => {
-        const targetPublished = stats.total ? (stats.published / stats.total) * 100 : 0;
-        const targetLive = stats.total ? (stats.live / stats.total) * 100 : 0;
-        const targetDraft = stats.total ? (stats.drafts / stats.total) * 100 : 0;
-        const targetFinished = stats.total ? (stats.finished / stats.total) * 100 : 0;
-        const targetInterested = stats.total ? (stats.interested / stats.total) * 100 : 0;
-        const startPublished = animatedPublishedPct;
-        const startLive = animatedLivePct;
-        const startDraft = animatedDraftPct;
-        const startFinished = animatedFinishedPct;
-        const startInterested = animatedInterestedPct;
-        const duration = 1000;
-        const start = performance.now();
-
-        const tick = (now) => {
-            const progress = Math.min((now - start) / duration, 1);
-            const eased = 1 - (1 - progress) ** 3;
-            setAnimatedPublishedPct(startPublished + (targetPublished - startPublished) * eased);
-            setAnimatedLivePct(startLive + (targetLive - startLive) * eased);
-            setAnimatedDraftPct(startDraft + (targetDraft - startDraft) * eased);
-            setAnimatedFinishedPct(startFinished + (targetFinished - startFinished) * eased);
-            setAnimatedInterestedPct(startInterested + (targetInterested - startInterested) * eased);
-            if (progress < 1) {
-                animationFrameRef.current = requestAnimationFrame(tick);
-            }
-        };
-
-        if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = requestAnimationFrame(tick);
-
-        return () => {
-            if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-        };
-    }, [stats.total, stats.published, stats.live, stats.drafts, stats.finished, stats.interested]);
 
     if (loading) return <Spinner size="lg" className="mt-24" />;
     if (error) return <ErrorState message={error} onRetry={fetchDashboard} />;
 
-    const liveRate = Math.round(animatedLivePct);
-    const viewerInvolvedPublished = viewerInvolvedPocs.filter((poc) => poc.status === 'published').length;
-    const viewerInvolvedLive = viewerInvolvedPocs.filter((poc) => poc.status === 'live').length;
-    const viewerInvolvedFinished = viewerInvolvedPocs.filter((poc) => poc.status === 'finished').length;
-    const viewerInvolvedTotal = viewerInvolvedPublished + viewerInvolvedLive + viewerInvolvedFinished;
-    const viewerPublishedPct = viewerInvolvedTotal ? Math.round((viewerInvolvedPublished / viewerInvolvedTotal) * 100) : 0;
-    const viewerLivePct = viewerInvolvedTotal ? Math.round((viewerInvolvedLive / viewerInvolvedTotal) * 100) : 0;
-    const viewerFinishedPct = viewerInvolvedTotal ? Math.round((viewerInvolvedFinished / viewerInvolvedTotal) * 100) : 0;
-    const draftShare = stats.total ? Math.round((stats.drafts / stats.total) * 100) : 0;
-    const publishedShare = stats.total ? Math.round((stats.published / stats.total) * 100) : 0;
-    const liveShare = stats.total ? Math.round((stats.live / stats.total) * 100) : 0;
-    const finishedShare = stats.total ? Math.round((stats.finished / stats.total) * 100) : 0;
-    const cancelledShare = stats.total ? Math.round((stats.cancelled / stats.total) * 100) : 0;
-    const displayedPublishedCount = isViewer ? viewerInvolvedPublished : stats.published;
-    const displayedLiveCount = isViewer ? viewerInvolvedLive : stats.live;
-    const displayedFinishedCount = isViewer ? viewerInvolvedFinished : stats.finished;
-    const displayedPublishedPct = isViewer ? viewerPublishedPct : animatedPublishedPct;
-    const displayedLivePct = isViewer ? viewerLivePct : animatedLivePct;
-    const displayedFinishedPct = isViewer ? viewerFinishedPct : animatedFinishedPct;
-    const publishedDeg = Math.max(0, Math.min(360, animatedPublishedPct * 3.6));
-    const liveDeg = isViewer ? 0 : Math.max(0, Math.min(360 - publishedDeg, animatedLivePct * 3.6));
-    const draftDeg = isViewer ? 0 : Math.max(0, Math.min(360 - publishedDeg - liveDeg, animatedDraftPct * 3.6));
-    const finishedStartDeg = publishedDeg + liveDeg + draftDeg;
-    const ringStyle = {
-        background: `conic-gradient(#7c3aed 0deg ${publishedDeg}deg, var(--color-terracotta-500) ${publishedDeg}deg ${publishedDeg + liveDeg}deg, var(--color-amber-500) ${publishedDeg + liveDeg}deg ${finishedStartDeg}deg, #16a34a ${finishedStartDeg}deg 360deg)`,
+    const handleMarkInterest = (poc) => {
+        setInterestingPoc(poc);
+        setAvailabilityValue('');
+        setAvailabilityUnit('per week');
+        setInterestError('');
+        setInterestModalOpen(true);
     };
 
-    const activePipelineItems = pipelineFilter
-        ? (isViewer ? viewerInvolvedPocs : allPocs).filter((poc) => {
-            const interestedMatch = pipelineFilter.interested ? poc.hasVoted : true;
-            const statusMatch = pipelineFilter.status ? poc.status === pipelineFilter.status : true;
-            const trackMatch = pipelineFilter.track ? poc.track === pipelineFilter.track : true;
-            return interestedMatch && statusMatch && trackMatch;
-        })
-        : [];
-    const activeTrackLabel = TRACKS.find((item) => item.key === pipelineFilter?.track)?.label;
-    const activePipelineTitle = pipelineFilter
-        ? `${isViewer ? 'My ' : ''}${pipelineFilter.interested ? 'Interested' : pipelineFilter.status ? (pipelineFilter.status.charAt(0).toUpperCase() + pipelineFilter.status.slice(1)) : ''}${activeTrackLabel ? `${pipelineFilter.status || pipelineFilter.interested ? ' · ' : ''}${activeTrackLabel}` : ''} Contributions`
-        : isViewer ? 'My Contribution Pipeline' : 'Contribution Pipeline';
-
-    const detectSegment = (event) => {
-        const rect = event.currentTarget.getBoundingClientRect();
-        const x = event.clientX - rect.left - rect.width / 2;
-        const y = event.clientY - rect.top - rect.height / 2;
-        const angleFromTop = (Math.atan2(y, x) * 180) / Math.PI + 90;
-        const normalized = (angleFromTop + 360) % 360;
-        if (normalized <= publishedDeg) return 'published';
-        if (normalized <= publishedDeg + liveDeg) return 'live';
-        if (normalized <= publishedDeg + liveDeg + draftDeg) return 'draft';
-        return 'finished';
+    const confirmInterest = async () => {
+        if (!interestingPoc?._id || !availabilityValue.trim()) {
+            setInterestError('Please enter how many hours you are free');
+            return;
+        }
+        setVoting(true);
+        setInterestError('');
+        try {
+            await pocService.upvote(interestingPoc._id, { availabilityValue, availabilityUnit });
+            setAllPocs((prev) =>
+                prev.map((p) => p._id === interestingPoc._id ? { ...p, hasVoted: true, votesCount: (p.votesCount || 0) + 1 } : p)
+            );
+            setInterestModalOpen(false);
+            setInterestingPoc(null);
+            setAvailabilityValue('');
+        } catch (err) {
+            const data = err?.response?.data;
+            const msg = (typeof data?.detail === 'string' && data.detail) || (typeof data?.message === 'string' && data.message) || 'Failed to mark interest';
+            setInterestError(msg);
+        } finally {
+            setVoting(false);
+        }
     };
 
-    const schedulePipelineReset = (force = false) => {
-        if (!force && !pipelineFilter) return;
-        if (pipelineResetTimerRef.current) clearTimeout(pipelineResetTimerRef.current);
-        pipelineResetTimerRef.current = setTimeout(() => {
-            setPipelineFilter(null);
-        }, 5000);
+    // ── Viewer-specific derivations ───────────────────────────────────────────
+    const currentUserId = user?._id || user?.id;
+    const currentUserEmail = String(user?.email || '').trim().toLowerCase();
+    const currentUserName = String(user?.name || '').trim().toLowerCase();
+    const firstName = user?.name?.split(' ')[0] || 'there';
+
+    const myRankEntry = fullLeaderboard.find((r) => String(r.user?._id) === String(currentUserId));
+    const myRank = myRankEntry?.rank ?? null;
+    const myTotalScore = Number(myCreditsData?.summary?.totalScore ?? 0);
+
+    const liveContribCount = viewerInvolvedPocs.filter((p) => p.status === 'live').length;
+    const activeInvolvementsCount = viewerInvolvedPocs.filter((p) => ['published', 'live'].includes(p.status)).length;
+    const completedCount = viewerInvolvedPocs.filter((p) => p.status === 'finished').length;
+
+    const discoverPocs = allPocs.filter((poc) => poc.status === 'published' && !poc.hasVoted).slice(0, 3);
+
+    const pocContactPocs = allPocs.filter((poc) => {
+        const poc_poc = String(poc.pointOfContact || '').trim().toLowerCase();
+        return poc_poc &&
+            (poc_poc === currentUserEmail || poc_poc === currentUserName) &&
+            !['finished', 'cancelled'].includes(poc.status);
+    });
+
+    const livePocs = viewerInvolvedPocs.filter((p) => p.status === 'live').slice(0, 3);
+
+    const myTrackCredits = TRACKS.map((t) => {
+        const trackData = (myCreditsData?.tracks || []).find((r) => r.track === t.key);
+        return { ...t, score: Number(trackData?.totalScore || 0) };
+    });
+    const maxTrackScore = Math.max(1, ...myTrackCredits.map((t) => t.score));
+
+    const isInTop5 = topUsersByCredits.some((r) => String(r.user?._id) === String(currentUserId));
+    const rank5Score = Number(topUsersByCredits[4]?.totalScore || 0);
+    const creditsToTop5 = !isInTop5 && myRank !== null && myRank > 5
+        ? Math.max(0, rank5Score - myTotalScore + 0.01)
+        : null;
+
+    // ── Viewer Dashboard ──────────────────────────────────────────────────────
+    if (isViewer) {
+        const hubItems = viewerHubTab === 'involved' ? livePocs : pocContactPocs.slice(0, 3);
+
+        return (
+            <div className="space-y-8">
+                {/* Welcome + Stat Cards Banner */}
+                <div className="rounded-3xl bg-gradient-to-br from-terracotta-900 via-terracotta-700 to-coral-600 p-6 sm:p-8 text-white shadow-lg">
+                    <h1 className="text-2xl sm:text-4xl font-bold">Welcome back, {firstName}! 👋</h1>
+                    <p className="text-white/85 mt-1">Explore new ideas, contribute to innovation and earn recognition.</p>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-4 mt-6">
+                        {/* My Rank */}
+                        <button type="button" onClick={() => leaderboardSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="text-left rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[104px] flex flex-col cursor-pointer">
+                            <p className="text-xs uppercase tracking-wide text-white/75 leading-tight">My Rank</p>
+                            <p className="text-3xl font-bold mt-auto leading-none">{myRank !== null ? `#${myRank}` : '-'}</p>
+                            <p className="text-xs text-white/60 mt-1">Overall leaderboard rank</p>
+                        </button>
+
+                        {/* My Credits */}
+                        <Link to="/my-credits" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[104px] flex flex-col">
+                            <p className="text-xs uppercase tracking-wide text-white/75 leading-tight">My Credits</p>
+                            <p className="text-3xl font-bold mt-auto leading-none">{myTotalScore.toFixed(2)}</p>
+                            <p className="text-xs text-white/60 mt-1">Contribution score</p>
+                        </Link>
+
+                        {/* Live Contributions */}
+                        <Link to="/pocs?involved=true&status=live" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[104px] flex flex-col">
+                            <p className="text-xs uppercase tracking-wide text-white/75 leading-tight">Live Contributions</p>
+                            <p className="text-3xl font-bold mt-auto leading-none">{liveContribCount}</p>
+                            <p className="text-xs text-white/60 mt-1">You are part of</p>
+                        </Link>
+
+                        {/* Active Involvements */}
+                        <Link to="/pocs?involved=true" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[104px] flex flex-col">
+                            <p className="text-xs uppercase tracking-wide text-white/75 leading-tight">Active Involvements</p>
+                            <p className="text-3xl font-bold mt-auto leading-none">{activeInvolvementsCount}</p>
+                            <p className="text-xs text-white/60 mt-1">Needs your attention</p>
+                        </Link>
+
+                        {/* Completed Contributions */}
+                        <Link to="/pocs?involved=true&status=finished" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[104px] flex flex-col">
+                            <p className="text-xs uppercase tracking-wide text-white/75 leading-tight">Completed Contributions</p>
+                            <p className="text-3xl font-bold mt-auto leading-none">{completedCount}</p>
+                            <p className="text-xs text-white/60 mt-1">Contributions completed</p>
+                        </Link>
+                    </div>
+                </div>
+
+                {/* My Workspace | Discover Contributions */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* My Workspace */}
+                    <Card hover={false} className="p-6">
+                        <div className="flex items-center justify-between mb-1">
+                            <h2 className="text-lg font-semibold text-charcoal-800">My Workspace</h2>
+                            <Link
+                                to={viewerHubTab === 'involved' ? '/pocs?involved=true&status=live' : '/pocs?pocContact=true'}
+                                className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+                            >
+                                View all
+                            </Link>
+                        </div>
+                        <p className="text-sm text-charcoal-500 mb-5">Things that need your attention.</p>
+
+                        {/* Tabs */}
+                        <div className="flex border-b border-sand-200 mb-4 gap-1">
+                            <button
+                                type="button"
+                                onClick={() => setViewerHubTab('involved')}
+                                className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${viewerHubTab === 'involved' ? 'border-blue-600 text-blue-600' : 'border-transparent text-charcoal-500 hover:text-charcoal-700'}`}
+                            >
+                                Live ({liveContribCount})
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setViewerHubTab('poc')}
+                                className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${viewerHubTab === 'poc' ? 'border-blue-600 text-blue-600' : 'border-transparent text-charcoal-500 hover:text-charcoal-700'}`}
+                            >
+                                Point of Contact ({pocContactPocs.length})
+                            </button>
+                        </div>
+
+                        {hubItems.length === 0 ? (
+                            <p className="text-sm text-charcoal-400 py-6 text-center">
+                                {viewerHubTab === 'involved' ? 'No live contributions yet.' : 'No active contributions assigned to you as point of contact.'}
+                            </p>
+                        ) : (
+                            <div className="space-y-2">
+                                {hubItems.map((poc) => {
+                                    const statusLabel = getHubStatusLabel(poc.status);
+                                    const isLive = poc.status === 'live';
+                                    return (
+                                        <Link
+                                            key={poc._id}
+                                            to={`/pocs/${poc._id}`}
+                                            className="flex items-center gap-3 px-3 py-3 rounded-xl border border-transparent hover:border-sand-200 hover:bg-sand-50 transition-colors group"
+                                        >
+                                            <div className="h-10 w-10 rounded-xl bg-sand-100 flex items-center justify-center shrink-0">
+                                                {getTrackIconSrc(poc.track) ? (
+                                                    <img src={getTrackIconSrc(poc.track)} alt="" className="h-5 w-5 object-contain opacity-60" />
+                                                ) : (
+                                                    <svg className="h-5 w-5 text-charcoal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+                                                    </svg>
+                                                )}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <p className="text-sm font-semibold text-charcoal-800 truncate">{poc.title}</p>
+                                                    {poc.track && (
+                                                        <span className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded bg-sand-100 text-charcoal-600">{poc.track.replace('Organizational Building & Thought Leadership', 'Thought Leadership')}</span>
+                                                    )}
+                                                </div>
+                                                <p className="text-xs text-charcoal-400 mt-0.5">
+                                                    Status: {statusLabel} &bull; Role: Contributor
+                                                </p>
+                                            </div>
+                                            <span className={`shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full ${isLive ? 'bg-emerald-100 text-emerald-700' : poc.status === 'published' ? 'bg-blue-100 text-blue-700' : 'bg-sand-100 text-charcoal-600'}`}>
+                                                {statusLabel}
+                                            </span>
+                                            <svg className="h-4 w-4 text-charcoal-300 shrink-0 group-hover:text-charcoal-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                                            </svg>
+                                        </Link>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </Card>
+
+                    {/* Discover Contributions */}
+                    <Card hover={false} className="p-6">
+                        <div className="flex items-center justify-between mb-1">
+                            <h2 className="text-lg font-semibold text-charcoal-800">Discover Contributions</h2>
+                            <Link to="/pocs?status=published" className="text-sm text-blue-600 hover:text-blue-700 font-medium">View all</Link>
+                        </div>
+                        <p className="text-sm text-charcoal-500 mb-5">Newly published opportunities. Mark interest to get involved.</p>
+
+                        {discoverPocs.length === 0 ? (
+                            <p className="text-sm text-charcoal-400 py-6 text-center">No new contributions to discover right now.</p>
+                        ) : (
+                            <div className="space-y-3">
+                                {discoverPocs.map((poc) => (
+                                    <div key={poc._id} className="flex items-center gap-4 rounded-xl p-2 -mx-2 hover:bg-sand-50 transition-colors group">
+                                        <Link to={`/pocs/${poc._id}`} className="flex items-center gap-4 flex-1 min-w-0">
+                                            <div className={`h-11 w-11 rounded-xl bg-gradient-to-br ${getThumbnailGradient(poc._id || poc.title)} flex items-center justify-center shrink-0`}>
+                                                {getTrackIconSrc(poc.track) ? (
+                                                    <img src={getTrackIconSrc(poc.track)} alt="" className="h-5 w-5 object-contain brightness-0 invert" />
+                                                ) : (
+                                                    <svg className="h-5 w-5 text-white/80" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
+                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                                                    </svg>
+                                                )}
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-semibold text-charcoal-800 truncate group-hover:text-blue-700 transition-colors">{poc.title}</p>
+                                                <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                                    {poc.track && (
+                                                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-50 text-blue-700">{poc.track.replace('Organizational Building & Thought Leadership', 'Thought Leadership')}</span>
+                                                    )}
+                                                    {(poc.techStack || []).slice(0, 2).map((t) => (
+                                                        <span key={t} className="text-[10px] px-1.5 py-0.5 rounded bg-sand-100 text-charcoal-600">{t}</span>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </Link>
+                                        <div className="flex items-center gap-3 shrink-0">
+                                            <div className="flex items-center gap-1 text-xs text-charcoal-500">
+                                                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
+                                                </svg>
+                                                {poc.votesCount || 0} Interested
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => handleMarkInterest(poc)}
+                                                className="text-xs font-medium px-3 py-1.5 rounded-lg border border-blue-300 text-blue-700 hover:bg-blue-50 transition-colors whitespace-nowrap"
+                                            >
+                                                Mark Interest
+                                            </button>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </Card>
+                </div>
+
+                {/* Track Overview */}
+                <div>
+                    <div className="mb-4">
+                        <h2 className="text-lg font-semibold text-charcoal-800">Track Overview</h2>
+                        <p className="text-sm text-charcoal-500">Published, live, and finished contribution counts by track.</p>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-5">
+                        {TRACKS.map((track) => {
+                            const ts = trackStats[track.key] || { published: 0, live: 0, finished: 0, total: 0 };
+                            const publishedPct = ts.total ? Math.round((ts.published / ts.total) * 100) : 0;
+                            const livePct = ts.total ? Math.round((ts.live / ts.total) * 100) : 0;
+                            const finishedPct = ts.total ? Math.round((ts.finished / ts.total) * 100) : 0;
+                            const trackParam = encodeURIComponent(track.key);
+                            return (
+                                <Card
+                                    key={track.key}
+                                    hover={false}
+                                    className="p-5 border-sand-200 cursor-pointer hover:border-terracotta-300 hover:shadow-md transition-all duration-200"
+                                    onClick={() => navigate(`/pocs?track=${trackParam}&status=all`)}
+                                >
+                                    <div className="flex items-start justify-between gap-3">
+                                        <p className="text-base font-semibold text-charcoal-800">{track.label}</p>
+                                        <div className="h-10 w-10 rounded-xl bg-terracotta-600 flex items-center justify-center shrink-0">
+                                            <img src={track.icon} alt="" className="h-5 w-5 object-contain brightness-0 invert" />
+                                        </div>
+                                    </div>
+                                    <p className="mt-1 text-xs text-charcoal-500">{ts.total} total contributions</p>
+                                    <div className="mt-5 space-y-3.5">
+                                        {[
+                                            { label: 'Published', status: 'published', count: ts.published, pct: publishedPct, barClass: 'bg-violet-600' },
+                                            { label: 'Live', status: 'live', count: ts.live, pct: livePct, barClass: 'bg-gradient-to-r from-terracotta-500 to-terracotta-700' },
+                                            { label: 'Finished', status: 'finished', count: ts.finished, pct: finishedPct, barClass: 'bg-green-600' },
+                                        ].map(({ label, status, count, pct, barClass }) => (
+                                            <div
+                                                key={label}
+                                                className="space-y-1 cursor-pointer group/bar"
+                                                onClick={(e) => { e.stopPropagation(); navigate(`/pocs?track=${trackParam}&status=${status}`); }}
+                                            >
+                                                <div className="flex items-center justify-between text-xs">
+                                                    <span className="text-charcoal-600 group-hover/bar:text-charcoal-900 transition-colors">{label}</span>
+                                                    <span className="font-medium text-charcoal-700">{count}</span>
+                                                </div>
+                                                <div className="h-2 rounded-full bg-sand-100 overflow-hidden group-hover/bar:h-2.5 transition-all">
+                                                    <div className={`h-full rounded-full ${barClass}`} style={{ width: `${pct}%` }} />
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </Card>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                {/* Top 5 Leaderboard | Credits by Track */}
+                <div ref={leaderboardSectionRef} className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Top 5 Users by Credits */}
+                    <Card hover={false} className="p-6">
+                        <div className="flex items-center justify-between mb-5">
+                            <h2 className="text-lg font-semibold text-charcoal-800 flex items-center gap-2">
+                                <svg className="h-5 w-5 text-amber-500" viewBox="0 0 24 24" fill="currentColor">
+                                    <path fillRule="evenodd" d="M5.166 2.621v.858c-1.035.148-2.059.33-3.071.543a.75.75 0 00-.584.859 6.753 6.753 0 006.138 5.6 6.73 6.73 0 002.743 1.346A6.707 6.707 0 019.279 15H8.54c-1.036 0-1.875.84-1.875 1.875V19.5h-.75a2.25 2.25 0 000 4.5h9a2.25 2.25 0 000-4.5h-.75v-2.625c0-1.036-.84-1.875-1.875-1.875h-.739a6.706 6.706 0 01-1.112-3.173 6.73 6.73 0 002.743-1.347 6.753 6.753 0 006.139-5.6.75.75 0 00-.585-.858 47.077 47.077 0 00-3.07-.543V2.62a.75.75 0 00-.658-.744 49.798 49.798 0 00-6.093-.377.75.75 0 00-.657.744zm0 2.629c0 1.196.312 2.32.857 3.294A5.266 5.266 0 013.16 5.337a45.6 45.6 0 012.006-.343v.256zm13.5 0v-.256c.674.1 1.343.214 2.006.343a5.265 5.265 0 01-2.863 3.207 6.72 6.72 0 00.857-3.294z" clipRule="evenodd" />
+                                </svg>
+                                Top 5 Users by Credits
+                            </h2>
+                            {/* <Link to="/admin/leaderboard" className="text-sm text-blue-600 hover:text-blue-700 font-medium">View full leaderboard</Link> */}
+                        </div>
+                        {topUsersByCredits.length === 0 ? (
+                            <p className="text-sm text-charcoal-400">No credit data available yet.</p>
+                        ) : (
+                            <div className="space-y-2.5">
+                                {topUsersByCredits.map((row, idx) => {
+                                    const isMe = String(row.user?._id) === String(currentUserId);
+                                    return (
+                                        <div
+                                            key={row.user?._id || idx}
+                                            className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-colors ${isMe ? 'border-blue-200 bg-blue-50' : 'border-sand-200 bg-sand-50/50'}`}
+                                        >
+                                            <span className="w-6 shrink-0 text-sm font-bold text-charcoal-800">
+                                                {idx + 1}
+                                            </span>
+                                            <div className="h-7 w-7 rounded-full bg-gradient-to-br from-terracotta-400 to-terracotta-600 flex items-center justify-center shrink-0">
+                                                <span className="text-xs font-bold text-white">{(row.user?.name || 'U').charAt(0).toUpperCase()}</span>
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className={`text-sm font-semibold truncate ${isMe ? 'text-blue-800' : 'text-charcoal-800'}`}>
+                                                    {isMe ? `You (${user?.name})` : (row.user?.name || 'Unknown')}
+                                                </p>
+                                                <p className="text-xs text-charcoal-400 truncate">{row.user?.email || ''}</p>
+                                            </div>
+                                            <p className={`text-sm font-bold shrink-0 ${isMe ? 'text-blue-700' : 'text-charcoal-700'}`}>
+                                                {Number(row.totalScore || 0).toFixed(2)}
+                                            </p>
+                                        </div>
+                                    );
+                                })}
+                                {!isInTop5 && myRankEntry && (
+                                    <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl border border-blue-200 bg-blue-50">
+                                        <span className="w-6 shrink-0 text-sm font-bold text-blue-500">#{myRank}</span>
+                                        <div className="h-7 w-7 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center shrink-0">
+                                            <span className="text-xs font-bold text-white">{(user?.name || 'U').charAt(0).toUpperCase()}</span>
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-semibold text-blue-800 truncate">You ({user?.name})</p>
+                                            <p className="text-xs text-charcoal-400 truncate">{user?.email || ''}</p>
+                                        </div>
+                                        <p className="text-sm font-bold text-blue-700 shrink-0">{myTotalScore.toFixed(2)}</p>
+                                    </div>
+                                )}
+                                {creditsToTop5 !== null && (
+                                    <div className="mt-2 flex items-center gap-2 rounded-xl border border-sand-200 bg-sand-50 px-3 py-2 text-sm text-charcoal-600">
+                                        <span>You're just</span>
+                                        <span className="font-semibold text-charcoal-800">{creditsToTop5.toFixed(2)}</span>
+                                        <span>credits away from Top 5! 🚀</span>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </Card>
+
+                    {/* Credits by Track */}
+                    <Card hover={false} className="p-6">
+                        <div className="mb-5">
+                            <h2 className="text-lg font-semibold text-charcoal-800">Credits by Track (Till Date)</h2>
+                        </div>
+                        {myTrackCredits.every((t) => t.score === 0) ? (
+                            <p className="text-sm text-charcoal-400">No track credits earned yet.</p>
+                        ) : (
+                            <div className="space-y-5">
+                                {myTrackCredits.map((t) => (
+                                    <div key={t.key} className="flex items-center gap-4">
+                                        <div className="h-8 w-8 rounded-lg bg-terracotta-600 flex items-center justify-center shrink-0">
+                                            <img src={t.icon} alt="" className="h-4 w-4 object-contain brightness-0 invert" />
+                                        </div>
+                                        <p className="w-36 shrink-0 text-sm font-medium text-charcoal-700 truncate">{t.label}</p>
+                                        <div className="flex-1 h-3 rounded-full bg-sand-100 overflow-hidden">
+                                            <div
+                                                className={`h-full rounded-full ${t.barClass}`}
+                                                style={{ width: `${(t.score / maxTrackScore) * 100}%` }}
+                                            />
+                                        </div>
+                                        <p className="w-14 shrink-0 text-right text-sm font-bold text-charcoal-800">
+                                            {t.score.toFixed(1)}
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </Card>
+                </div>
+
+                {/* Mark Interest Modal */}
+                <Modal isOpen={interestModalOpen} onClose={() => !voting && setInterestModalOpen(false)} title="Share Your Availability" size="sm">
+                    {interestingPoc && (
+                        <div className="space-y-4">
+                            <p className="text-sm text-charcoal-600">
+                                Let the team know how much time you can contribute to <span className="font-semibold text-charcoal-800">{interestingPoc.title}</span>.
+                            </p>
+                            <div className="space-y-1.5">
+                                <label className="block text-sm font-medium text-charcoal-700">Please enter the number of hours</label>
+                                <div className="flex gap-3">
+                                    <Input
+                                        type="number"
+                                        min="1"
+                                        placeholder="8"
+                                        value={availabilityValue}
+                                        onChange={(e) => setAvailabilityValue(e.target.value)}
+                                        className="flex-1"
+                                    />
+                                    <select
+                                        value={availabilityUnit}
+                                        onChange={(e) => setAvailabilityUnit(e.target.value)}
+                                        className="w-36 rounded-xl border border-sand-300 bg-white px-4 py-2.5 text-sm text-charcoal-800 focus:border-terracotta-400 focus:ring-2 focus:ring-terracotta-100 focus:outline-none transition-all duration-200"
+                                    >
+                                        {AVAILABILITY_UNITS.map((unit) => (
+                                            <option key={unit} value={unit}>{unit}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <p className="text-xs text-charcoal-500">Example: 8 hours per week</p>
+                                {interestError && <p className="text-xs text-red-600">{interestError}</p>}
+                            </div>
+                            <div className="flex justify-end gap-2">
+                                <Button type="button" variant="ghost" size="sm" disabled={voting} onClick={() => setInterestModalOpen(false)}>
+                                    Cancel
+                                </Button>
+                                <Button type="button" size="sm" loading={voting} onClick={confirmInterest}>
+                                    Mark Interested
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+                </Modal>
+            </div>
+        );
+    }
+
+    // ── Admin / Developer Dashboard ───────────────────────────────────────────
+    const pendingApprovalPocs = pendingApprovalsList.slice(0, 5);
+
+    const recentSubmissions = [...allPocs]
+        .filter((p) => p.status === 'published')
+        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+        .slice(0, 5);
+
+    const trackInterestData = TRACKS.map((track) => {
+        const totalInterest = allPocs
+            .filter((p) => p.track === track.key)
+            .reduce((sum, p) => sum + (p.votesCount || 0), 0);
+        const totalPocs = allPocs.filter((p) => p.track === track.key).length;
+        return { ...track, totalInterest, totalPocs };
+    });
+    const maxTrackInterest = Math.max(1, ...trackInterestData.map((t) => t.totalInterest));
+
+    const handlePublishPoc = async (pocId) => {
+        setPublishingId(pocId);
+        try {
+            await pocService.publish(pocId);
+            setAllPocs((prev) => prev.map((p) => p._id === pocId ? { ...p, status: 'published' } : p));
+            setPendingApprovalsList((prev) => prev.filter((p) => p._id !== pocId));
+        } catch { /* ignore */ } finally {
+            setPublishingId(null);
+        }
     };
 
-    const handleRingClick = (event) => {
-        const clickedSegment = detectSegment(event);
-        setPipelineFilter({ status: clickedSegment });
-        schedulePipelineReset(true);
+    const getStatusBadgeClass = (status) => {
+        if (status === 'published') return 'bg-violet-100 text-violet-700';
+        if (status === 'live') return 'bg-emerald-100 text-emerald-700';
+        if (status === 'finished') return 'bg-green-100 text-green-700';
+        if (status === 'draft') return 'bg-amber-100 text-amber-700';
+        if (status === 'cancelled') return 'bg-red-100 text-red-700';
+        return 'bg-sand-100 text-charcoal-600';
     };
 
-    const goToInvolvedContributions = (status = '') => {
-        const params = new URLSearchParams();
-        params.set('involved', 'true');
-        if (status) params.set('status', status);
-        navigate(`/pocs?${params.toString()}`);
+    const getTrackBadgeClass = (track) => {
+        if (track === 'Solutions') return 'bg-indigo-50 text-indigo-700 border border-indigo-200';
+        if (track === 'Delivery') return 'bg-blue-50 text-blue-700 border border-blue-200';
+        if (track === 'Learning') return 'bg-green-50 text-green-700 border border-green-200';
+        if (track === 'GTM/Sales') return 'bg-orange-50 text-orange-700 border border-orange-200';
+        return 'bg-slate-50 text-slate-700 border border-slate-200';
     };
+
+    const getTrackShortLabel = (track) =>
+        track === 'Organizational Building & Thought Leadership' ? 'Thought Leadership' : track;
 
     return (
         <div className="space-y-8">
-            {!isViewer && (
+            {/* Gradient Banner */}
             <div className="rounded-3xl bg-gradient-to-br from-terracotta-900 via-terracotta-700 to-coral-600 p-6 sm:p-8 text-white shadow-lg">
-                <h1 className="text-2xl sm:text-3xl font-bold">Vibe Dashboard</h1>
-                <p className="text-white/85 mt-1">
-                    Hello {user?.name?.split(' ')[0] || 'there'}, here is your contribution pulse.
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-6 gap-4 mt-6">
-                    <Link to="/pocs?status=all" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[104px] flex flex-col">
-                        <p className="text-xs uppercase tracking-wide text-white/75 leading-tight min-h-[2.5rem]">Total Contributions</p>
+                <h1 className="text-2xl sm:text-3xl font-bold">Admin Dashboard</h1>
+                <p className="text-white/85 mt-1">Monitor, manage and drive innovation across the organization.</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-4 mt-6">
+                    <Link to="/pocs?status=all" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[100px] flex flex-col gap-2">
+                        <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+                                <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" /></svg>
+                            </div>
+                            <p className="text-xs font-medium text-white/80">Total Contributions</p>
+                        </div>
                         <p className="text-3xl font-bold mt-auto leading-none">{stats.total}</p>
                     </Link>
-                    <Link to="/pocs?status=published" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[104px] flex flex-col">
-                        <p className="text-xs uppercase tracking-wide text-white/75 leading-tight min-h-[2.5rem]">Published Contributions</p>
+                    <Link to="/pocs?status=published" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[100px] flex flex-col gap-2">
+                        <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+                                <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" /></svg>
+                            </div>
+                            <p className="text-xs font-medium text-white/80">Published</p>
+                        </div>
                         <p className="text-3xl font-bold mt-auto leading-none">{stats.published}</p>
                     </Link>
-                    <Link to="/pocs?status=live" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[104px] flex flex-col">
-                        <p className="text-xs uppercase tracking-wide text-white/75 leading-tight min-h-[2.5rem]">Live Contributions</p>
+                    <Link to="/pocs?status=live" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[100px] flex flex-col gap-2">
+                        <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+                                <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8.288 15.038a5.25 5.25 0 017.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0M12.53 18.22l-.53.53-.53-.53a.75.75 0 011.06 0z" /></svg>
+                            </div>
+                            <p className="text-xs font-medium text-white/80">Live</p>
+                        </div>
                         <p className="text-3xl font-bold mt-auto leading-none">{stats.live}</p>
                     </Link>
-                    <Link to="/pocs?status=draft" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[104px] flex flex-col">
-                        <p className="text-xs uppercase tracking-wide text-white/75 leading-tight min-h-[2.5rem]">Draft Contributions</p>
+                    <Link to="/pocs?status=draft" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[100px] flex flex-col gap-2">
+                        <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+                                <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>
+                            </div>
+                            <p className="text-xs font-medium text-white/80">Draft</p>
+                        </div>
                         <p className="text-3xl font-bold mt-auto leading-none">{stats.drafts}</p>
                     </Link>
-                    <Link to="/pocs?status=finished" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[104px] flex flex-col">
-                        <p className="text-xs uppercase tracking-wide text-white/75 leading-tight min-h-[2.5rem]">Finished Contributions</p>
+                    <Link to="/pocs?status=finished" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[100px] flex flex-col gap-2">
+                        <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+                                <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            </div>
+                            <p className="text-xs font-medium text-white/80">Finished</p>
+                        </div>
                         <p className="text-3xl font-bold mt-auto leading-none">{stats.finished}</p>
                     </Link>
-                    <Link to="/pocs?status=cancelled" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[104px] flex flex-col">
-                        <p className="text-xs uppercase tracking-wide text-white/75 leading-tight min-h-[2.5rem]">Cancelled Contributions</p>
+                    <Link to="/pocs?status=cancelled" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[100px] flex flex-col gap-2">
+                        <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
+                                <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                            </div>
+                            <p className="text-xs font-medium text-white/80">Cancelled</p>
+                        </div>
                         <p className="text-3xl font-bold mt-auto leading-none">{stats.cancelled}</p>
                     </Link>
                 </div>
             </div>
-            )}
 
+            {/* Track Overview */}
             <div>
-                <div className="mb-4">
-                    <h2 className="text-lg font-semibold text-charcoal-800">Track Overview</h2>
-                    <p className="text-sm text-charcoal-500">
-                        {isViewer ? 'Published, live, and finished contribution counts by track.' : 'Published, live, draft, finished, and cancelled contribution counts by track.'}
-                    </p>
+                <div className="flex items-center justify-between mb-4">
+                    <div>
+                        <h2 className="text-lg font-semibold text-charcoal-800">Track Overview</h2>
+                        <p className="text-sm text-charcoal-500">Published, live, draft, finished and cancelled contributions by track.</p>
+                    </div>
+                    <Link to="/pocs" className="text-sm text-blue-600 hover:text-blue-700 font-medium">View all tracks</Link>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
                     {TRACKS.map((track) => {
-                        const statsForTrack = trackStats[track.key] || { published: 0, live: 0, draft: 0, finished: 0, cancelled: 0, total: 0 };
-                        const publishedPct = statsForTrack.total
-                            ? Math.round((statsForTrack.published / statsForTrack.total) * 100)
-                            : 0;
-                        const livePct = statsForTrack.total
-                            ? Math.round((statsForTrack.live / statsForTrack.total) * 100)
-                            : 0;
-                        const draftPct = statsForTrack.total
-                            ? Math.round((statsForTrack.draft / statsForTrack.total) * 100)
-                            : 0;
-                        const finishedPct = statsForTrack.total
-                            ? Math.round((statsForTrack.finished / statsForTrack.total) * 100)
-                            : 0;
-                        const cancelledPct = statsForTrack.total
-                            ? Math.round((statsForTrack.cancelled / statsForTrack.total) * 100)
-                            : 0;
-
+                        const ts = trackStats[track.key] || { published: 0, live: 0, draft: 0, finished: 0, cancelled: 0, total: 0 };
+                        const publishedPct = ts.total ? Math.round((ts.published / ts.total) * 100) : 0;
+                        const livePct = ts.total ? Math.round((ts.live / ts.total) * 100) : 0;
+                        const draftPct = ts.total ? Math.round((ts.draft / ts.total) * 100) : 0;
+                        const finishedPct = ts.total ? Math.round((ts.finished / ts.total) * 100) : 0;
+                        const cancelledPct = ts.total ? Math.round((ts.cancelled / ts.total) * 100) : 0;
                         return (
-                            <Card key={track.key} hover={false} className="p-4 border-sand-200">
-                                <div className="flex items-start justify-between gap-3">
-                                    <p className="text-base font-semibold text-charcoal-800">{track.label}</p>
-                                    <div className="h-10 w-10 rounded-xl bg-terracotta-600 flex items-center justify-center shrink-0">
-                                        <img
-                                            src={track.icon}
-                                            alt={`${track.label} icon`}
-                                            className="h-6 w-6 object-contain brightness-0 invert"
-                                        />
+                            <Card
+                                key={track.key}
+                                hover={false}
+                                className="p-4 border-sand-200 cursor-pointer hover:shadow-md transition-shadow"
+                                onClick={() => navigate(`/pocs?track=${encodeURIComponent(track.key)}&status=all`)}
+                            >
+                                <div className="flex items-start justify-between gap-2 mb-1">
+                                    <div>
+                                        <p className="text-sm font-semibold text-charcoal-800">{track.label}</p>
+                                        <p className="text-xs text-charcoal-400">{ts.total} Total</p>
+                                    </div>
+                                    <div className={`h-10 w-10 rounded-xl ${track.iconBg} flex items-center justify-center shrink-0`}>
+                                        <img src={track.icon} alt={track.label} className="h-5 w-5 object-contain brightness-0 invert" />
                                     </div>
                                 </div>
-                                <p className="mt-1 text-xs text-charcoal-500">{statsForTrack.total} total contributions</p>
-
-                                    <div className="mt-4 space-y-3">
-                                        <div className="space-y-1">
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setPipelineFilter({ status: 'published', track: track.key });
-                                                schedulePipelineReset(true);
-                                            }}
-                                            className="w-full flex items-center justify-between text-xs rounded-md px-1 py-0.5 hover:bg-sand-100 transition-colors"
-                                            title={`Show published ${track.label} contributions in pipeline`}
+                                <div className="mt-4 space-y-2.5">
+                                    {[
+                                        { label: 'Published', count: ts.published, pct: publishedPct, barClass: 'bg-violet-500', status: 'published' },
+                                        { label: 'Live', count: ts.live, pct: livePct, barClass: 'bg-blue-500', status: 'live' },
+                                        { label: 'Draft', count: ts.draft, pct: draftPct, barClass: 'bg-amber-400', status: 'draft' },
+                                        { label: 'Finished', count: ts.finished, pct: finishedPct, barClass: 'bg-green-500', status: 'finished' },
+                                        { label: 'Cancelled', count: ts.cancelled, pct: cancelledPct, barClass: 'bg-red-500', status: 'cancelled' },
+                                    ].map(({ label, count, pct, barClass, status }) => (
+                                        <div
+                                            key={label}
+                                            className="space-y-1 cursor-pointer"
+                                            onClick={(e) => { e.stopPropagation(); navigate(`/pocs?track=${encodeURIComponent(track.key)}&status=${status}`); }}
                                         >
-                                            <span className="text-charcoal-600">Published</span>
-                                            <span className="font-medium text-charcoal-700">{statsForTrack.published}</span>
-                                        </button>
-                                        <div className="h-2 rounded-full bg-sand-100 overflow-hidden">
-                                            <div
-                                                className="h-full rounded-full bg-violet-600"
-                                                style={{ width: `${publishedPct}%` }}
-                                            />
+                                            <div className="flex items-center justify-between text-xs">
+                                                <span className="text-charcoal-600">{label}</span>
+                                                <span className="font-medium text-charcoal-700">{count}</span>
+                                            </div>
+                                            <div className="h-1.5 rounded-full bg-sand-100 overflow-hidden">
+                                                <div className={`h-full rounded-full ${barClass}`} style={{ width: `${pct}%` }} />
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div className="space-y-1">
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setPipelineFilter({ status: 'live', track: track.key });
-                                                schedulePipelineReset(true);
-                                            }}
-                                            className="w-full flex items-center justify-between text-xs rounded-md px-1 py-0.5 hover:bg-sand-100 transition-colors"
-                                            title={`Show live ${track.label} contributions in pipeline`}
-                                        >
-                                            <span className="text-charcoal-600">Live</span>
-                                            <span className="font-medium text-charcoal-700">{statsForTrack.live}</span>
-                                        </button>
-                                        <div className="h-2 rounded-full bg-sand-100 overflow-hidden">
-                                            <div
-                                                className="h-full rounded-full bg-gradient-to-r from-terracotta-500 to-terracotta-700"
-                                                style={{ width: `${livePct}%` }}
-                                            />
-                                        </div>
-                                    </div>
-                                    {!isViewer && (
-                                    <div className="space-y-1">
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setPipelineFilter({ status: 'draft', track: track.key });
-                                                schedulePipelineReset(true);
-                                            }}
-                                            className="w-full flex items-center justify-between text-xs rounded-md px-1 py-0.5 hover:bg-sand-100 transition-colors"
-                                            title={`Show draft ${track.label} contributions in pipeline`}
-                                        >
-                                            <span className="text-charcoal-600">Draft</span>
-                                            <span className="font-medium text-charcoal-700">{statsForTrack.draft}</span>
-                                        </button>
-                                <div className="h-2 rounded-full bg-sand-100 overflow-hidden">
-                                            <div
-                                                className="h-full rounded-full bg-gradient-to-r from-amber-400 to-amber-600"
-                                                style={{ width: `${draftPct}%` }}
-                                            />
-                                        </div>
-                                    </div>
-                                    )}
-                                    <div className="space-y-1">
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setPipelineFilter({ status: 'finished', track: track.key });
-                                                schedulePipelineReset(true);
-                                            }}
-                                            className="w-full flex items-center justify-between text-xs rounded-md px-1 py-0.5 hover:bg-sand-100 transition-colors"
-                                            title={`Show finished ${track.label} contributions in pipeline`}
-                                        >
-                                            <span className="text-charcoal-600">Finished</span>
-                                            <span className="font-medium text-charcoal-700">{statsForTrack.finished}</span>
-                                        </button>
-                                        <div className="h-2 rounded-full bg-sand-100 overflow-hidden">
-                                            <div
-                                                className="h-full rounded-full bg-green-600"
-                                                style={{ width: `${finishedPct}%` }}
-                                            />
-                                        </div>
-                                    </div>
-                                    {!isViewer && (
-                                    <div className="space-y-1">
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setPipelineFilter({ status: 'cancelled', track: track.key });
-                                                schedulePipelineReset(true);
-                                            }}
-                                            className="w-full flex items-center justify-between text-xs rounded-md px-1 py-0.5 hover:bg-sand-100 transition-colors"
-                                            title={`Show cancelled ${track.label} contributions in pipeline`}
-                                        >
-                                            <span className="text-charcoal-600">Cancelled</span>
-                                            <span className="font-medium text-charcoal-700">{statsForTrack.cancelled}</span>
-                                        </button>
-                                        <div className="h-2 rounded-full bg-sand-100 overflow-hidden">
-                                            <div
-                                                className="h-full rounded-full bg-red-600"
-                                                style={{ width: `${cancelledPct}%` }}
-                                            />
-                                        </div>
-                                    </div>
-                                    )}
+                                    ))}
                                 </div>
                             </Card>
                         );
@@ -438,353 +800,250 @@ export default function Dashboard() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                <Card hover={false} className="p-5 lg:col-span-1">
-                    <h2 className="text-sm font-semibold text-charcoal-700 uppercase tracking-wide">{isViewer ? 'Top 5 Users by Credits' : 'Go-Live Ratio'}</h2>
-                    {isViewer ? (
-                        <div className="mt-4 space-y-2">
-                            {topUsersByCredits.length === 0 ? (
-                                <p className="text-sm text-charcoal-500">No credit data available yet.</p>
-                            ) : (
-                                topUsersByCredits.map((row, idx) => (
-                                    <div key={row.user?._id || idx} className="flex items-center justify-between rounded-xl border border-sand-200 bg-sand-50 px-3 py-2">
-                                        <div className="min-w-0 flex-1">
-                                            <div className="flex items-center gap-2 min-w-0">
-                                                <span className="w-7 shrink-0 text-sm font-semibold text-charcoal-800">#{idx + 1}</span>
-                                                <p className="text-sm font-semibold text-charcoal-800 truncate">{row.user?.name || 'Unknown User'}</p>
-                                            </div>
-                                            <p className="pl-9 text-xs text-charcoal-500 truncate">{row.user?.email || ''}</p>
-                                        </div>
-                                        <p className="text-sm font-bold text-violet-700 ml-3">{Number(row.totalCredits || 0).toFixed(2)}</p>
-                                    </div>
-                                ))
-                            )}
-                        </div>
-                    ) : (
-                        <>
-                        <div className="mt-5 relative flex items-center justify-center">
-                            <div
-                                className="w-36 h-36 rounded-full p-3 cursor-pointer"
-                                style={ringStyle}
-                                onClick={handleRingClick}
-                                title="Click segment to filter pipeline"
-                            >
-                                <div className="w-full h-full rounded-full bg-white flex flex-col items-center justify-center">
-                                    <p className="text-3xl font-bold text-charcoal-800">{liveRate}%</p>
-                                    <p className="text-xs text-charcoal-500">Live</p>
-                                </div>
-                            </div>
-                        </div>
-                        <p className="text-sm text-charcoal-500 mt-4 text-center">
-                            {stats.live} live out of {stats.total} contribution briefs.
-                        </p>
-                        <div className="mt-3 flex items-center justify-center gap-4 text-xs">
-                                <span className="inline-flex items-center gap-2 text-charcoal-600">
-                                    <span className="w-2.5 h-2.5 rounded-full bg-violet-600" />
-                                    Published
-                                </span>
-                                <span className="inline-flex items-center gap-2 text-charcoal-600">
-                                    <span className="w-2.5 h-2.5 rounded-full bg-terracotta-500" />
-                                    Live
-                                </span>
-                                <span className="inline-flex items-center gap-2 text-charcoal-600">
-                                    <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-                                    Draft
-                                </span>
-                                <span className="inline-flex items-center gap-2 text-charcoal-600">
-                                    <span className="w-2.5 h-2.5 rounded-full bg-green-600" />
-                                    Finished
-                                </span>
-                        </div>
-                        </>
-                    )}
-                </Card>
-
-                <Card
-                    hover={false}
-                    className="p-5 lg:col-span-2"
-                    onMouseMove={schedulePipelineReset}
-                    onMouseEnter={schedulePipelineReset}
-                >
-                    <div className="flex items-center justify-between gap-3">
-                        <h2 className="text-sm font-semibold text-charcoal-700 uppercase tracking-wide">
-                            {pipelineFilter ? activePipelineTitle : (isViewer ? 'My Contribution Pipeline' : 'Contribution Pipeline')}
-                        </h2>
-                        {isViewer && !pipelineFilter && (
-                            <Button type="button" size="sm" variant="ghost" onClick={() => goToInvolvedContributions()}>
-                                View All
-                            </Button>
-                        )}
+            {/* Pending Approvals + Recent Submissions */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Pending Approvals */}
+                <Card hover={false} className="p-6">
+                    <div className="mb-1">
+                        <h2 className="text-base font-semibold text-charcoal-800">Pending Approvals</h2>
+                        <p className="text-sm text-charcoal-500">Contributions that need your review and approval.</p>
                     </div>
-
-                    {!pipelineFilter ? (
-                        <div className="mt-5 space-y-4">
-                            <div>
-                                <div className="text-sm mb-1">
-                                {isViewer ? (
-                                    <button
-                                        type="button"
-                                        onClick={() => goToInvolvedContributions('published')}
-                                        className="w-full flex items-center justify-between rounded-md px-1 py-0.5 text-left hover:bg-sand-100 transition-colors"
-                                        title="Open involved published contributions"
-                                    >
-                                        <span className="text-charcoal-600">Published Contributions</span>
-                                        <span className="font-semibold text-charcoal-800">{displayedPublishedCount}</span>
-                                    </button>
-                                ) : (
-                                    <div className="w-full flex items-center justify-between">
-                                    <span className="text-charcoal-600">Published Contributions</span>
-                                    <span className="font-semibold text-charcoal-800">{displayedPublishedCount}</span>
-                                    </div>
-                                )}
-                                </div>
-                                <div className="h-3 rounded-full bg-sand-100 overflow-hidden">
-                                    <div
-                                        className="h-full rounded-full bg-violet-600"
-                                        style={{ width: `${displayedPublishedPct}%` }}
-                                    />
-                                </div>
-                            </div>
-                            <div>
-                                <div className="text-sm mb-1">
-                                {isViewer ? (
-                                    <button
-                                        type="button"
-                                        onClick={() => goToInvolvedContributions('live')}
-                                        className="w-full flex items-center justify-between rounded-md px-1 py-0.5 text-left hover:bg-sand-100 transition-colors"
-                                        title="Open involved live contributions"
-                                    >
-                                        <span className="text-charcoal-600">Live Contributions</span>
-                                        <span className="font-semibold text-charcoal-800">{displayedLiveCount}</span>
-                                    </button>
-                                ) : (
-                                    <div className="w-full flex items-center justify-between">
-                                    <span className="text-charcoal-600">Live Contributions</span>
-                                    <span className="font-semibold text-charcoal-800">{displayedLiveCount}</span>
-                                    </div>
-                                )}
-                                </div>
-                                <div className="h-3 rounded-full bg-sand-100 overflow-hidden">
-                                    <div
-                                        className="h-full rounded-full bg-gradient-to-r from-terracotta-500 to-terracotta-700"
-                                        style={{ width: `${displayedLivePct}%` }}
-                                    />
-                                </div>
-                            </div>
-                            {!isViewer && (
-                            <div>
-                                <div className="flex items-center justify-between text-sm mb-1">
-                                    <span className="text-charcoal-600">Draft Contributions</span>
-                                    <span className="font-semibold text-charcoal-800">{stats.drafts}</span>
-                                </div>
-                                <div className="h-3 rounded-full bg-sand-100 overflow-hidden">
-                                    <div
-                                        className="h-full rounded-full bg-gradient-to-r from-amber-400 to-amber-600"
-                                        style={{ width: `${animatedDraftPct}%` }}
-                                    />
-                                </div>
-                            </div>
-                            )}
-                            <div>
-                                <div className="text-sm mb-1">
-                                {isViewer ? (
-                                    <button
-                                        type="button"
-                                        onClick={() => goToInvolvedContributions('finished')}
-                                        className="w-full flex items-center justify-between rounded-md px-1 py-0.5 text-left hover:bg-sand-100 transition-colors"
-                                        title="Open involved finished contributions"
-                                    >
-                                        <span className="text-charcoal-600">Finished Contributions</span>
-                                        <span className="font-semibold text-charcoal-800">{displayedFinishedCount}</span>
-                                    </button>
-                                ) : (
-                                    <div className="w-full flex items-center justify-between">
-                                    <span className="text-charcoal-600">Finished Contributions</span>
-                                    <span className="font-semibold text-charcoal-800">{displayedFinishedCount}</span>
-                                    </div>
-                                )}
-                                </div>
-                                <div className="h-3 rounded-full bg-sand-100 overflow-hidden">
-                                    <div
-                                        className="h-full rounded-full bg-green-600"
-                                        style={{ width: `${displayedFinishedPct}%` }}
-                                    />
-                                </div>
-                            </div>
-                            {!isViewer && (
-                            <div>
-                                <div className="flex items-center justify-between text-sm mb-1">
-                                    <span className="text-charcoal-600">Cancelled Contributions</span>
-                                    <span className="font-semibold text-charcoal-800">{stats.cancelled}</span>
-                                </div>
-                                <div className="h-3 rounded-full bg-sand-100 overflow-hidden">
-                                    <div
-                                        className="h-full rounded-full bg-red-600"
-                                        style={{ width: `${cancelledShare}%` }}
-                                    />
-                                </div>
-                            </div>
-                            )}
-                            <div className="border-t border-sand-200 pt-3">
-                                <div className={`grid grid-cols-1 sm:grid-cols-2 ${isViewer ? 'xl:grid-cols-3' : 'xl:grid-cols-5'} gap-2.5`}>
-                                    {isViewer ? (
-                                        <>
-                                            <div className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2.5">
-                                                <p className="text-[11px] uppercase tracking-wide text-violet-700">Published Share</p>
-                                                <p className="mt-1 text-lg font-semibold text-violet-700">{viewerPublishedPct}%</p>
-                                            </div>
-                                            <div className="rounded-xl border border-orange-200 bg-orange-50 px-3 py-2.5">
-                                                <p className="text-[11px] uppercase tracking-wide text-orange-700">Live Share</p>
-                                                <p className="mt-1 text-lg font-semibold text-orange-700">{viewerLivePct}%</p>
-                                            </div>
-                                            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5">
-                                                <p className="text-[11px] uppercase tracking-wide text-emerald-700">Finished Share</p>
-                                                <p className="mt-1 text-lg font-semibold text-emerald-700">{viewerFinishedPct}%</p>
-                                            </div>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
-                                                <p className="text-[11px] uppercase tracking-wide text-amber-700">Draft Share</p>
-                                                <p className="mt-1 text-lg font-semibold text-amber-700">{draftShare}%</p>
-                                            </div>
-                                            <div className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2.5">
-                                                <p className="text-[11px] uppercase tracking-wide text-violet-700">Published Share</p>
-                                                <p className="mt-1 text-lg font-semibold text-violet-700">{publishedShare}%</p>
-                                            </div>
-                                            <div className="rounded-xl border border-orange-200 bg-orange-50 px-3 py-2.5">
-                                                <p className="text-[11px] uppercase tracking-wide text-orange-700">Live Share</p>
-                                                <p className="mt-1 text-lg font-semibold text-orange-700">{liveShare}%</p>
-                                            </div>
-                                            <div className="rounded-xl border border-green-200 bg-green-50 px-3 py-2.5">
-                                                <p className="text-[11px] uppercase tracking-wide text-green-700">Finished Share</p>
-                                                <p className="mt-1 text-lg font-semibold text-green-700">{finishedShare}%</p>
-                                            </div>
-                                            <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2.5">
-                                                <p className="text-[11px] uppercase tracking-wide text-red-700">Cancelled Share</p>
-                                                <p className="mt-1 text-lg font-semibold text-red-700">{cancelledShare}%</p>
-                                            </div>
-                                        </>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    ) : activePipelineItems.length === 0 ? (
-                        <div className="mt-5">
-                            <p className="text-sm text-charcoal-500">No items found.</p>
-                        </div>
-                    ) : (
-                        <div className="mt-5 max-h-72 overflow-auto space-y-2.5 pr-1">
-                            {activePipelineItems.map((item) => (
-                                <Link
-                                    key={item._id}
-                                    to={`/pocs/${item._id}`}
-                                    className="block rounded-xl border border-sand-200 bg-white px-3 py-2.5 hover:bg-sand-50 hover:border-sand-300 transition-colors"
-                                >
-                                    <div className="flex items-start gap-3">
-                                        {item.thumbnail ? (
-                                            <img
-                                                src={item.thumbnail}
-                                                alt={item.title}
-                                                className="w-12 h-12 rounded-lg object-cover flex-shrink-0"
-                                            />
-                                        ) : (
-                                            <div className={`w-12 h-12 rounded-lg bg-gradient-to-br ${getThumbnailGradient(item._id || item.title)} flex items-center justify-center flex-shrink-0`}>
-                                                {getTrackIconSrc(item.track) ? (
-                                                    <img
-                                                        src={getTrackIconSrc(item.track)}
-                                                        alt={`${item.track || 'Contribution'} icon`}
-                                                        className="w-6 h-6 object-contain brightness-0 invert"
-                                                    />
+                    <div className="mt-4">
+                        {pendingApprovalPocs.length === 0 ? (
+                            <p className="text-sm text-charcoal-400 py-6 text-center">No contributions pending approval.</p>
+                        ) : isTrackAdmin ? (
+                            <>
+                            
+                            <div className="grid grid-cols-[1fr_144px] gap-x-3 items-end">
+                                <span className="text-xs font-semibold text-charcoal-500 uppercase tracking-wide pb-2 border-b border-sand-200">Title</span>
+                                <span className="text-xs font-semibold text-charcoal-500 uppercase tracking-wide pb-2 border-b border-sand-200">Track</span>
+                                {pendingApprovalPocs.map((poc) => (
+                                    <Fragment key={poc._id}>
+                                        <Link to={`/pocs/${poc._id}`} className="flex items-center gap-2 min-w-0 py-2.5 border-b border-sand-100 hover:bg-sand-50 rounded-l-lg -ml-2 pl-2 transition-colors">
+                                            <div className={`h-8 w-8 rounded-lg ${(TRACKS.find(t => t.key === poc.track)?.iconBg) || 'bg-terracotta-600'} flex items-center justify-center shrink-0`}>
+                                                {getTrackIconSrc(poc.track) ? (
+                                                    <img src={getTrackIconSrc(poc.track)} alt="" className="h-4 w-4 object-contain brightness-0 invert" />
                                                 ) : (
-                                                    <svg className="w-5 h-5 text-white/85" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
-                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-                                                    </svg>
+                                                    <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                                                 )}
                                             </div>
-                                        )}
-                                        <div className="min-w-0 flex-1">
-                                            <div className="flex items-center justify-between gap-2">
-                                                <p className="text-sm font-semibold text-charcoal-800 truncate">{getTitleWithTrack(item)}</p>
-                                                <Badge color={item.status === 'published' || item.status === 'live' || item.status === 'finished' ? 'green' : 'amber'}>
-                                                    {item.status}
-                                                </Badge>
+                                            <span className="text-sm font-medium text-charcoal-800 truncate">{poc.title}</span>
+                                        </Link>
+                                        <Link to={`/pocs/${poc._id}`} className="flex items-center py-2.5 border-b border-sand-100 hover:bg-sand-50 rounded-r-lg -mr-2 pr-2 transition-colors">
+                                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${getTrackBadgeClass(poc.track)}`}>
+                                                {getTrackShortLabel(poc.track)}
+                                            </span>
+                                        </Link>
+                                    </Fragment>
+                                ))}
+                                
+                            </div>
+                            <div className="mt-3 flex justify-end">
+                                    <Link to="/pocs?status=draft" className="text-sm text-blue-600 hover:text-blue-700 font-medium">View all approvals</Link>
+                                </div>
+                            </>
+
+                            
+                        ) : (
+                            /* Global admin: title + track + action (View + Publish) */
+                            <>
+                                <div className="grid grid-cols-[1fr_144px_120px] gap-x-3 items-end">
+                                    <span className="text-xs font-semibold text-charcoal-500 uppercase tracking-wide pb-2 border-b border-sand-200">Title</span>
+                                    <span className="text-xs font-semibold text-charcoal-500 uppercase tracking-wide pb-2 border-b border-sand-200">Track</span>
+                                    <span className="text-xs font-semibold text-charcoal-500 uppercase tracking-wide pb-2 border-b border-sand-200">Action</span>
+                                    {pendingApprovalPocs.map((poc) => (
+                                        <Fragment key={poc._id}>
+                                            <div className="flex items-center gap-2 min-w-0 py-2.5 border-b border-sand-100">
+                                                <div className={`h-8 w-8 rounded-lg ${(TRACKS.find(t => t.key === poc.track)?.iconBg) || 'bg-terracotta-600'} flex items-center justify-center shrink-0`}>
+                                                    {getTrackIconSrc(poc.track) ? (
+                                                        <img src={getTrackIconSrc(poc.track)} alt="" className="h-4 w-4 object-contain brightness-0 invert" />
+                                                    ) : (
+                                                        <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                                    )}
+                                                </div>
+                                                <span className="text-sm font-medium text-charcoal-800 truncate">{poc.title}</span>
                                             </div>
-                                            <p className="text-xs text-charcoal-500 mt-0.5 line-clamp-1">
-                                                {item.description || 'No description provided'}
-                                            </p>
-                                            <div className="mt-1.5 text-[11px] text-charcoal-500">
-                                                {(item.votesCount || 0)} interested
+                                            <div className="flex items-center py-2.5 border-b border-sand-100">
+                                                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${getTrackBadgeClass(poc.track)}`}>
+                                                    {getTrackShortLabel(poc.track)}
+                                                </span>
                                             </div>
-                                        </div>
-                                    </div>
-                                </Link>
-                            ))}
-                        </div>
-                    )}
+                                            <div className="flex items-center gap-1.5 py-2.5 border-b border-sand-100">
+                                                <Link
+                                                    to={`/pocs/${poc._id}`}
+                                                    className="text-xs font-medium px-2.5 py-1 rounded-lg border border-sand-300 text-charcoal-700 hover:bg-sand-50 transition-colors"
+                                                >
+                                                    View
+                                                </Link>
+                                                <button
+                                                    type="button"
+                                                    disabled={publishingId === poc._id}
+                                                    onClick={() => handlePublishPoc(poc._id)}
+                                                    className="text-xs font-medium px-2.5 py-1 rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-60 transition-colors"
+                                                >
+                                                    {publishingId === poc._id ? '…' : 'Publish'}
+                                                </button>
+                                            </div>
+                                        </Fragment>
+                                    ))}
+                                </div>
+                                <div className="mt-3 flex justify-end">
+                                    <Link to="/admin/idea-reviews" className="text-sm text-blue-600 hover:text-blue-700 font-medium">View all approvals</Link>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </Card>
+
+                {/* Recent Submissions */}
+                <Card hover={false} className="p-6">
+                    <div className="mb-1">
+                        <h2 className="text-base font-semibold text-charcoal-800">Recent Submissions</h2>
+                        <p className="text-sm text-charcoal-500">Latest published contributions added to the system.</p>
+                    </div>
+                    <div className="mt-4">
+                        {recentSubmissions.length === 0 ? (
+                            <p className="text-sm text-charcoal-400 py-6 text-center">No published contributions yet.</p>
+                        ) : (
+                            <>
+                                <div className="grid grid-cols-[1fr_144px_76px] gap-x-3 items-end">
+                                    <span className="text-xs font-semibold text-charcoal-500 uppercase tracking-wide pb-2 border-b border-sand-200">Title</span>
+                                    <span className="text-xs font-semibold text-charcoal-500 uppercase tracking-wide pb-2 border-b border-sand-200">Track</span>
+                                    <span className="text-xs font-semibold text-charcoal-500 uppercase tracking-wide pb-2 border-b border-sand-200 text-right">Interested</span>
+                                    {recentSubmissions.map((poc) => (
+                                        <Fragment key={poc._id}>
+                                            <Link to={`/pocs/${poc._id}`} className="flex items-center gap-2 min-w-0 py-2.5 border-b border-sand-100 hover:bg-sand-50 rounded-l-lg -ml-2 pl-2 transition-colors">
+                                                <div className={`h-8 w-8 rounded-lg ${(TRACKS.find(t => t.key === poc.track)?.iconBg) || 'bg-terracotta-600'} flex items-center justify-center shrink-0`}>
+                                                    {getTrackIconSrc(poc.track) ? (
+                                                        <img src={getTrackIconSrc(poc.track)} alt="" className="h-4 w-4 object-contain brightness-0 invert" />
+                                                    ) : (
+                                                        <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                                    )}
+                                                </div>
+                                                <span className="text-sm font-medium text-charcoal-800 truncate">{poc.title}</span>
+                                            </Link>
+                                            <Link to={`/pocs/${poc._id}`} className="flex items-center py-2.5 border-b border-sand-100 hover:bg-sand-50 transition-colors">
+                                                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${getTrackBadgeClass(poc.track)}`}>
+                                                    {getTrackShortLabel(poc.track)}
+                                                </span>
+                                            </Link>
+                                            <Link to={`/pocs/${poc._id}`} className="flex items-center justify-end gap-1 py-2.5 border-b border-sand-100 hover:bg-sand-50 rounded-r-lg -mr-2 pr-2 transition-colors">
+                                                <svg className="h-3.5 w-3.5 text-charcoal-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
+                                                </svg>
+                                                <span className="text-sm font-semibold text-charcoal-700">{poc.votesCount || 0}</span>
+                                            </Link>
+                                        </Fragment>
+                                    ))}
+                                </div>
+                                <div className="mt-3 flex justify-end">
+                                    <Link to="/pocs?status=published" className="text-sm text-blue-600 hover:text-blue-700 font-medium">View all submissions</Link>
+                                </div>
+                            </>
+                        )}
+                    </div>
                 </Card>
             </div>
 
-            <div>
-                <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-semibold text-charcoal-800">Recent Contribution Briefs</h2>
-                    <Link to="/pocs">
-                        <Button variant="ghost" size="sm">View all</Button>
-                    </Link>
-                </div>
-
-                {recentPocs.length === 0 ? (
-                    <Card hover={false} className="p-8 text-center">
-                        <p className="text-charcoal-500">No contribution briefs yet.</p>
-                        {(user?.role === 'admin' || user?.role === 'developer') && (
-                            <Link to="/pocs/new">
-                                <Button variant="outline" size="sm" className="mt-3">Create your first Contribution Brief</Button>
-                            </Link>
-                        )}
-                    </Card>
-                ) : (
-                    <div className="grid grid-cols-1 gap-4">
-                        {recentPocs.map((poc) => (
-                            <Link key={poc._id} to={`/pocs/${poc._id}`} className="block">
-                                <Card className="p-4 flex items-center gap-4">
-                                    {poc.thumbnail ? (
-                                        <img
-                                            src={poc.thumbnail}
-                                            alt={poc.title}
-                                            className="w-16 h-16 rounded-xl object-cover flex-shrink-0"
-                                        />
-                                    ) : (
-                                        <div className={`w-16 h-16 rounded-xl bg-gradient-to-br ${getThumbnailGradient(poc._id || poc.title)} flex items-center justify-center flex-shrink-0`}>
-                                            {getTrackIconSrc(poc.track) ? (
-                                                <img
-                                                    src={getTrackIconSrc(poc.track)}
-                                                    alt={`${poc.track || 'Contribution'} icon`}
-                                                    className="w-8 h-8 object-contain brightness-0 invert"
-                                                />
-                                            ) : (
-                                                <svg className="w-6 h-6 text-white/85" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-                                                </svg>
-                                            )}
-                                        </div>
-                                    )}
+            {/* Top Contributors + Interest Pulse */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Top Contributors */}
+                <Card hover={false} className="p-6">
+                    <div className="flex items-center justify-between mb-5">
+                        <h2 className="text-lg font-semibold text-charcoal-800 flex items-center gap-2">
+                            <svg className="h-5 w-5 text-amber-500" viewBox="0 0 24 24" fill="currentColor">
+                                <path fillRule="evenodd" d="M5.166 2.621v.858c-1.035.148-2.059.33-3.071.543a.75.75 0 00-.584.859 6.753 6.753 0 006.138 5.6 6.73 6.73 0 002.743 1.346A6.707 6.707 0 019.279 15H8.54c-1.036 0-1.875.84-1.875 1.875V19.5h-.75a2.25 2.25 0 000 4.5h9a2.25 2.25 0 000-4.5h-.75v-2.625c0-1.036-.84-1.875-1.875-1.875h-.739a6.706 6.706 0 01-1.112-3.173 6.73 6.73 0 002.743-1.347 6.753 6.753 0 006.139-5.6.75.75 0 00-.585-.858 47.077 47.077 0 00-3.07-.543V2.62a.75.75 0 00-.658-.744 49.798 49.798 0 00-6.093-.377.75.75 0 00-.657.744zm0 2.629c0 1.196.312 2.32.857 3.294A5.266 5.266 0 013.16 5.337a45.6 45.6 0 012.006-.343v.256zm13.5 0v-.256c.674.1 1.343.214 2.006.343a5.265 5.265 0 01-2.863 3.207 6.72 6.72 0 00.857-3.294z" clipRule="evenodd" />
+                            </svg>
+                            Top 5 Users by Credits
+                        </h2>
+                    </div>
+                    {topUsersByCredits.length === 0 ? (
+                        <p className="text-sm text-charcoal-400">No credit data available yet.</p>
+                    ) : (
+                        <div className="space-y-2.5">
+                            {topUsersByCredits.map((row, idx) => (
+                                <div
+                                    key={row.user?._id || idx}
+                                    className="flex items-center gap-3 px-4 py-3 rounded-xl border border-sand-200 bg-sand-50/50 transition-colors"
+                                >
+                                    <span className="w-6 shrink-0 text-sm font-bold text-charcoal-800">{idx + 1}</span>
+                                    <div className="h-7 w-7 rounded-full bg-gradient-to-br from-terracotta-400 to-terracotta-600 flex items-center justify-center shrink-0">
+                                        <span className="text-xs font-bold text-white">{(row.user?.name || 'U').charAt(0).toUpperCase()}</span>
+                                    </div>
                                     <div className="flex-1 min-w-0">
-                                        <h3 className="font-semibold text-charcoal-800 truncate">{getTitleWithTrack(poc)}</h3>
-                                        <p className="text-sm text-charcoal-500 truncate">{poc.description}</p>
-                                        <div className="flex items-center gap-2 mt-1.5">
-                                            <Badge color={poc.status === 'published' || poc.status === 'live' || poc.status === 'finished' ? 'green' : 'amber'}>
-                                                {poc.status}
-                                            </Badge>
-                                            {poc.techStack?.slice(0, 3).map((t) => (
-                                                <Badge key={t} color="sand">{t}</Badge>
-                                            ))}
+                                        <p className="text-sm font-semibold text-charcoal-800 truncate">{row.user?.name || 'Unknown'}</p>
+                                        <p className="text-xs text-charcoal-400 truncate">{row.user?.email || ''}</p>
+                                    </div>
+                                    <p className="text-sm font-bold text-charcoal-700 shrink-0">{Number(row.totalScore || 0).toFixed(2)}</p>
+                                </div>
+                            ))}
+                            <div className="mt-2 flex justify-end">
+                                <Link to="/admin/leaderboard" className="text-sm text-blue-600 hover:text-blue-700 font-medium">View full leaderboard</Link>
+                            </div>
+                        </div>
+                    )}
+                </Card>
+
+                {/* Interest Pulse */}
+                <Card hover={false} className="p-6 flex flex-col">
+                    <div className="mb-4">
+                        <h2 className="text-base font-semibold text-charcoal-800">Interest Pulse by Track</h2>
+                        <p className="text-sm text-charcoal-500">Interested users per track.</p>
+                    </div>
+                    {trackInterestData.every((t) => t.totalInterest === 0) ? (
+                        <div className="flex-1 flex items-center justify-center">
+                            <p className="text-sm text-charcoal-400">No interest data yet.</p>
+                        </div>
+                    ) : (
+                        <div className="flex-1 flex flex-col justify-center">
+                            <div className="flex gap-2">
+                                {/* Y-axis labels */}
+                                <div className="flex flex-col justify-between items-end shrink-0 w-6" style={{ height: '176px' }}>
+                                    {[maxTrackInterest, Math.round(maxTrackInterest * 0.75), Math.round(maxTrackInterest * 0.5), Math.round(maxTrackInterest * 0.25), 0].map((val, i) => (
+                                        <span key={i} className="text-[10px] leading-none text-charcoal-400">{val}</span>
+                                    ))}
+                                </div>
+
+                                {/* Chart area */}
+                                <div className="flex-1 flex flex-col">
+                                    {/* Bars + gridlines */}
+                                    <div className="relative h-44">
+                                        {[100, 75, 50, 25, 0].map((pct) => (
+                                            <div key={pct} className="absolute inset-x-0 border-t border-sand-200" style={{ top: `${100 - pct}%` }} />
+                                        ))}
+                                        <div className="absolute inset-0 flex items-end gap-1 px-2">
+                                            {trackInterestData.map((track) => {
+                                                const heightPct = Math.max(2, (track.totalInterest / maxTrackInterest) * 100);
+                                                return (
+                                                    <div key={track.key} className="flex-1 h-full flex items-end justify-center">
+                                                        <div
+                                                            className={`relative group/bar w-12 rounded-t-md cursor-default transition-opacity duration-150 hover:opacity-75 ${track.barClass}`}
+                                                            style={{ height: `${heightPct}%` }}
+                                                        >
+                                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-charcoal-800 text-white text-xs font-medium rounded-lg px-2.5 py-2 whitespace-nowrap opacity-0 group-hover/bar:opacity-100 transition-opacity pointer-events-none z-30 shadow-xl">
+                                                                <p className="font-semibold mb-0.5">{track.label}</p>
+                                                                <p className="text-white/75">{track.totalInterest} interested users</p>
+                                                                <div className="absolute top-full left-1/2 -translate-x-1/2 -translate-y-px w-2 h-2 bg-charcoal-800 rotate-45" />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
                                         </div>
                                     </div>
-                                </Card>
-                            </Link>
-                        ))}
-                    </div>
-                )}
+                                    {/* X-axis labels */}
+                                    <div className="flex gap-1 px-2 mt-2">
+                                        {trackInterestData.map((track) => (
+                                            <div key={track.key} className="flex-1 text-center">
+                                                <span className="text-[10px] font-bold text-charcoal-700 leading-tight">{track.label}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </Card>
             </div>
         </div>
     );

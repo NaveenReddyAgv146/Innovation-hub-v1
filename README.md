@@ -15,13 +15,43 @@ Innovation Hub is a full-stack internal contribution platform for submitting, re
 
 ## Recent Changes (Included)
 
-- Viewer dashboard card updated from **Track Ratio** to **Top 5 Users by Credits**.
-- `/users/leaderboard` is now available to all authenticated users (used by viewer dashboard too).
-- Admin feedback now supports **mandatory rating (1 to 5 stars)** per participant.
-- Admin feedback timeline now shows stored star ratings.
-- Viewer contribution filter bug fixed: selecting **Published** now returns only `published` items (not live/finished).
-- Power Automate webhook support is documented via env var:
-  - `POWER_AUTOMATE_LIVE_WEBHOOK_URL`
+### Track Admin Dashboard (My Track Dashboard)
+- Complete rewrite of the Track Dashboard with 4 sections in a **2×2 grid layout**:
+  - **Recent Submissions** — latest 5 published contributions in the track
+  - **Live Contributions** — latest 5 active contributions with Point of Contact and working user count
+  - **Pending Approvals** — latest 5 draft contributions awaiting review
+  - **Top 5 Users by Credits** — track-scoped leaderboard
+- Each section shows the 5 most recent records (sorted by `createdAt` desc) with a **"View all"** link that redirects to the full filtered contributions list (`/pocs?track=...&status=...`)
+- Banner stat cards link directly to the filtered contributions list for each status
+
+### Admin Dashboard (Main Dashboard)
+- Track admins see the same org-wide data as global admins on the main dashboard
+- **Pending Approvals**: track admins see a 2-column view (Title + Track) with clickable rows linking to the contribution detail page — no Action column
+- Global admins retain View + Publish action buttons in Pending Approvals
+
+### Interest Pulse (Admin Dashboard)
+- Replaced text-based Interest Pulse with a **vertical bar chart** (X-axis = tracks, Y-axis = interested user count)
+- Hover tooltip on each bar shows exact interested user count
+- Chart is vertically centred in the card; bars are narrow with bold track labels
+
+### Point of Contact Permissions
+- Viewers who are the **Point of Contact** for a contribution get full admin-level features on that contribution's detail page:
+  - Manage approvals (approve / remove users, direct add)
+  - Status transitions (publish / go-live / finish / move to draft / cancel)
+  - Provide admin feedback with star ratings on finished contributions
+  - View contribution hours summary
+  - Edit the contribution
+
+### Credits & Leaderboard Fixes
+- Fixed credits showing as **0** in both the admin Leaderboard page and the viewer My Credits page — field names were mismatched between backend (`totalScore`, `averageScore`, `totalHoursLogged`) and frontend
+- Viewer dashboard card updated from **Track Ratio** to **Top 5 Users by Credits**
+- `/users/leaderboard` is now available to all authenticated users (used by viewer dashboard too)
+
+### Other
+- Admin feedback now supports **mandatory rating (1 to 5 stars)** per participant
+- Admin feedback timeline now shows stored star ratings
+- Viewer contribution filter bug fixed: selecting **Published** now returns only `published` items (not live/finished)
+- Power Automate webhook support via env var `POWER_AUTOMATE_LIVE_WEBHOOK_URL`
 
 ## Tech Stack
 
@@ -138,6 +168,7 @@ Default admin credentials:
   - Can browse visible contributions
   - Can mark interest, view involved contributions
   - Can see personal credits
+  - If designated as **Point of Contact** for a contribution, gets full admin-level management rights on that contribution
 
 ## Feedback & Rating (Finished Contributions)
 

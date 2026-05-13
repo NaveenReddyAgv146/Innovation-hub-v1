@@ -6,7 +6,7 @@ import Spinner from '../components/ui/Spinner';
 import ErrorState from '../components/ui/ErrorState';
 
 export default function MyCredits() {
-    const [summary, setSummary] = useState({ totalCredits: 0, finishedContributions: 0, tracksContributed: 0 });
+    const [summary, setSummary] = useState({ totalScore: 0, finishedContributions: 0, tracksContributed: 0 });
     const [tracks, setTracks] = useState([]);
     const [creditRules, setCreditRules] = useState({ High: 10, Medium: 7, Low: 5 });
     const [loading, setLoading] = useState(true);
@@ -17,7 +17,7 @@ export default function MyCredits() {
         setError('');
         try {
             const res = await userService.getMyCredits();
-            setSummary(res.data?.summary || { totalCredits: 0, finishedContributions: 0, tracksContributed: 0 });
+            setSummary(res.data?.summary || { totalScore: 0, finishedContributions: 0, tracksContributed: 0 });
             setTracks(res.data?.tracks || []);
             setCreditRules(res.data?.creditRules || { High: 10, Medium: 7, Low: 5 });
         } catch {
@@ -44,7 +44,7 @@ export default function MyCredits() {
                 <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div className="rounded-xl border border-violet-200 bg-violet-50 px-4 py-3">
                         <p className="text-xs uppercase tracking-wide text-violet-700">Total Credits</p>
-                        <p className="mt-1 text-2xl font-bold text-violet-700">{Number(summary.totalCredits || 0).toFixed(2)}</p>
+                        <p className="mt-1 text-2xl font-bold text-violet-700">{Number(summary.totalScore || 0).toFixed(2)}</p>
                     </div>
                     <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
                         <p className="text-xs uppercase tracking-wide text-emerald-700">Finished Contributions</p>
@@ -78,7 +78,7 @@ export default function MyCredits() {
                                         <td className="py-2 pr-3">
                                             <Badge color="sand">{row.track}</Badge>
                                         </td>
-                                        <td className="py-2 pr-3 font-semibold text-violet-700">{Number(row.credits || 0).toFixed(2)}</td>
+                                        <td className="py-2 pr-3 font-semibold text-violet-700">{Number(row.totalScore || 0).toFixed(2)}</td>
                                         <td className="py-2 pr-3 text-charcoal-700">{row.finishedContributions || 0}</td>
                                         <td className="py-2 text-charcoal-600">
                                             {row.highImpactCount || 0}/{row.mediumImpactCount || 0}/{row.lowImpactCount || 0}

@@ -7,6 +7,7 @@ from app.schemas.auth import normalize_employee_id, normalize_name_part, validat
 
 Role = Literal["admin", "developer", "viewer"]
 AdminScope = Literal["global", "track"]
+Band = Literal["A1", "A2", "A3", "A4", "A5", "A6"]
 AdminTrack = Literal[
     "Solutions",
     "Delivery",
@@ -25,6 +26,7 @@ class CreateUserRequest(BaseModel):
     employeeId: str | None = Field(default=None, max_length=100)
     adminScope: AdminScope | None = None
     adminTrack: AdminTrack | None = None
+    band: Band | None = None
 
     @field_validator("firstName")
     @classmethod
@@ -66,6 +68,7 @@ class UpdateUserRequest(BaseModel):
     employeeId: str | None = Field(default=None, max_length=100)
     adminScope: AdminScope | None = None
     adminTrack: AdminTrack | None = None
+    band: Band | None = None
 
     @field_validator("firstName")
     @classmethod

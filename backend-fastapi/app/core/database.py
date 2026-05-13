@@ -40,6 +40,17 @@ class Database:
         await self.db.pocs.create_index([("techStack", ASCENDING)])
         await self.db.pocs.create_index([("title", TEXT), ("description", TEXT)])
 
+        try:
+            await self.db.contribution_hours.drop_index("pocId_1_userId_1_date_1")
+        except Exception:
+            pass
+        await self.db.contribution_hours.create_index(
+            [("pocId", ASCENDING), ("userId", ASCENDING), ("date", ASCENDING)],
+        )
+        await self.db.contribution_hours.create_index(
+            [("pocId", ASCENDING), ("userId", ASCENDING)],
+        )
+
 
 database = Database()
 

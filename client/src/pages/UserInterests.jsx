@@ -37,7 +37,7 @@ export default function UserInterests() {
             const { data } = await userService.getInterests(params);
             setRows(data.users || []);
         } catch {
-            setError('Failed to load user interests');
+            setError('Failed to load Engagement Overview');
         } finally {
             setLoading(false);
         }
@@ -51,7 +51,7 @@ export default function UserInterests() {
     return (
         <div className="space-y-6">
             <div>
-                <h1 className="text-2xl font-bold text-charcoal-800">User Interests</h1>
+                <h1 className="text-2xl font-bold text-charcoal-800">Engagement Overview</h1>
                 <p className="text-charcoal-500 text-sm mt-0.5">
                     {assignedAdminTrack
                         ? `Track which users are interested in ${assignedAdminTrack} contributions.`
@@ -76,7 +76,7 @@ export default function UserInterests() {
                 <ErrorState message={error} onRetry={fetchData} />
             ) : rows.length === 0 ? (
                 <EmptyState
-                    title="No user interests found"
+                    title="No Engagement Overview found"
                     message="No users have marked interest in projects yet."
                     icon={
                         <svg className="w-16 h-16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>

@@ -113,7 +113,7 @@ export default function Leaderboard() {
                                     <th className="py-2 pr-3">Rank</th>
                                     <th className="py-2 pr-3">User</th>
                                     <th className="py-2 pr-3">Credits</th>
-                                    <th className="py-2 pr-3">Avg Stars</th>
+                                    {/* <th className="py-2 pr-3">Avg Stars</th> */}
                                     <th className="py-2 pr-3">Hours</th>
                                     <th className="py-2 pr-3">Finished</th>
                                     <th className="py-2">Impact Mix (H/M/L)</th>
@@ -127,9 +127,9 @@ export default function Leaderboard() {
                                             <div className="font-medium text-charcoal-800">{row.user?.name || 'Unknown'}</div>
                                             <div className="text-xs text-charcoal-500">{row.user?.email || ''}</div>
                                         </td>
-                                        <td className="py-2 pr-3 font-semibold text-violet-700">{Number(row.totalCredits || 0).toFixed(2)}</td>
-                                        <td className="py-2 pr-3 text-charcoal-700">{Number(row.averageStarRating || 0).toFixed(2)}</td>
-                                        <td className="py-2 pr-3 text-charcoal-700">{Number(row.totalHoursSpent || 0).toFixed(2)}</td>
+                                        <td className="py-2 pr-3 font-semibold text-violet-700">{Number(row.totalScore || 0).toFixed(2)}</td>
+                                        {/* <td className="py-2 pr-3 text-charcoal-700">{Number(row.averageScore || 0).toFixed(2)}</td> */}
+                                        <td className="py-2 pr-3 text-charcoal-700">{Number(row.totalHoursLogged || 0).toFixed(2)}</td>
                                         <td className="py-2 pr-3 text-charcoal-700">{row.finishedContributions || 0}</td>
                                         <td className="py-2 text-charcoal-600">
                                             {row.highImpactCount || 0}/{row.mediumImpactCount || 0}/{row.lowImpactCount || 0}

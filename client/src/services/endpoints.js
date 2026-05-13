@@ -64,22 +64,46 @@ export const pocService = {
         formData.append('userId', userId);
         return api.post(`/pocs/${id}/approve-user`, formData);
     },
+    addContributor: (id, userId) => {
+        const formData = new FormData();
+        formData.append('userId', userId);
+        return api.post(`/pocs/${id}/add-contributor`, formData);
+    },
     unapproveUser: (id, userId) => {
         const formData = new FormData();
         formData.append('userId', userId);
         return api.post(`/pocs/${id}/unapprove-user`, formData);
     },
-    addAdminFeedback: (id, userId, feedback, rating) => {
+    addAdminFeedback: (id, userId, feedback, performanceCategory) => {
         const formData = new FormData();
         formData.append('userId', userId);
         formData.append('feedback', feedback);
-        formData.append('rating', String(rating));
+        formData.append('performanceCategory', performanceCategory);
         return api.post(`/pocs/${id}/admin-feedback`, formData);
     },
     addUserFeedback: (id, feedback) => {
         const formData = new FormData();
         formData.append('feedback', feedback);
         return api.post(`/pocs/${id}/user-feedback`, formData);
+    },
+    getMyHours: (id) => api.get(`/pocs/${id}/my-hours`),
+    logHours: (id, { startTime, endTime }) => {
+        const formData = new FormData();
+        formData.append('startTime', startTime);
+        formData.append('endTime', endTime);
+        return api.post(`/pocs/${id}/log-hours`, formData);
+    },
+    updateHourSlot: (id, slotId, { startTime, endTime }) => {
+        const formData = new FormData();
+        formData.append('startTime', startTime);
+        formData.append('endTime', endTime);
+        return api.put(`/pocs/${id}/log-hours/${slotId}`, formData);
+    },
+    getHoursSummary: (id) => api.get(`/pocs/${id}/hours-summary`),
+    approveContributorHours: (id, userId) => {
+        const formData = new FormData();
+        formData.append('userId', userId);
+        return api.post(`/pocs/${id}/approve-contributor-hours`, formData);
     },
 };
 

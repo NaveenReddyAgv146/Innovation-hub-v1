@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib import error as url_error
@@ -32,6 +32,7 @@ VALID_TRACKS = {
     "Organizational Building & Thought Leadership",
 }
 VALID_IMPACTS = {"High", "Medium", "Low"}
+VALID_COMPLEXITIES = {"High", "Medium", "Low"}
 IMPACT_CREDIT_MAP = {"High": 10, "Medium": 7, "Low": 5}
 VALID_ESTIMATED_DURATION_UNITS = {"days", "weeks", "months", "years"}
 VALID_AVAILABILITY_UNITS = {"per day", "per week"}
@@ -45,6 +46,25 @@ AVAILABILITY_UNIT_ALIASES = {
     "weeks": "per week",
     "per week": "per week",
 }
+
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def get_today_ist() -> str:
+    return datetime.now(IST).date().isoformat()
+
+
+def get_now_ist_time() -> str:
+    return datetime.now(IST).strftime("%H:%M")
+
+
+def times_overlap(s1: str, e1: str, s2: str, e2: str) -> bool:
+    return s2 < e1 and e2 > s1
+
+
+def parse_hhmm(value: str, field: str) -> None:
+    if not re.match(r"^\d{2}:\d{2}$", value):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"{field} must be in HH:MM format")
 
 
 def enforce_admin_track_access(current_user: dict[str, Any], track: str) -> None:
@@ -529,6 +549,9 @@ async def get_pocs(
         if poc_contact:
             if status_filter:
                 query_parts.append({"status": status_filter})
+        elif interested:
+            if status_filter and status_filter not in ("", "all"):
+                query_parts.append({"status": status_filter})
         elif involved:
             if status_filter == "published":
                 query_parts.append({"status": "published"})
@@ -550,7 +573,7 @@ async def get_pocs(
         elif status_filter == "finished":
             query_parts.append({"status": "finished"})
         else:
-            query_parts.append({"$or": [{"status": {"$in": ["published", "finished"]}}, {"author": viewer_id}]})
+            query_parts.append({"$or": [{"status": {"$in": ["published", "live", "finished"]}}, {"author": viewer_id}]})
     elif status_filter:
         query_parts.append({"status": status_filter})
     elif exclude_cancelled:
@@ -645,6 +668,7 @@ async def create_poc(
     challenges: str = Form(default=""),
     requestorName: str = Form(default=""),
     impact: str = Form(...),
+    complexity: str = Form(default="Medium"),
     estimatedDurationValue: str = Form(...),
     estimatedDurationUnit: str = Form(...),
     liveAt: str | None = Form(default=None),
@@ -666,6 +690,8 @@ async def create_poc(
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid track")
     if impact not in VALID_IMPACTS:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid impact")
+    if complexity not in VALID_COMPLEXITIES:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Complexity must be High, Medium, or Low")
     enforce_admin_track_access(current_user, track)
 
     thumbnail_path = await save_thumbnail(thumbnail)
@@ -711,6 +737,7 @@ async def create_poc(
         "thumbnail": thumbnail_path,
         "status": status_value,
         "impact": impact,
+        "complexity": complexity,
         "estimatedDurationValue": estimated_duration_value,
         "estimatedDurationUnit": estimated_duration_unit,
         "liveAt": parsed_live_at,
@@ -744,6 +771,7 @@ async def update_poc(
     challenges: str | None = Form(default=None),
     requestorName: str | None = Form(default=None),
     impact: str | None = Form(default=None),
+    complexity: str | None = Form(default=None),
     estimatedDurationValue: str | None = Form(default=None),
     estimatedDurationUnit: str | None = Form(default=None),
     liveAt: str | None = Form(default=None),
@@ -803,6 +831,10 @@ async def update_poc(
         if impact not in VALID_IMPACTS:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid impact")
         updates["impact"] = impact
+    if complexity is not None:
+        if complexity not in VALID_COMPLEXITIES:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Complexity must be High, Medium, or Low")
+        updates["complexity"] = complexity
     if estimatedDurationValue is not None:
         updates["estimatedDurationValue"] = parse_estimated_duration_value(estimatedDurationValue)
     if estimatedDurationUnit is not None:
@@ -1315,14 +1347,71 @@ async def unapprove_poc_user(
     if not ObjectId.is_valid(userId):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid user id")
     target_user_id = ObjectId(userId)
+    directly_added_ids = {str(uid) for uid in (poc.get("directlyAddedUserIds") or [])}
+    was_directly_added = str(target_user_id) in directly_added_ids
+
+    pull_fields: dict[str, Any] = {
+        "approvedUsers": target_user_id,
+        "approvedDetails": {"userId": target_user_id},
+    }
+    if was_directly_added:
+        pull_fields["votes"] = target_user_id
+        pull_fields["directlyAddedUserIds"] = target_user_id
+
+    await db.pocs.update_one(
+        {"_id": ObjectId(poc_id)},
+        {"$pull": pull_fields, "$set": {"updatedAt": datetime.now(timezone.utc)}},
+    )
+    return {"message": "User unapproved"}
+
+
+@router.post("/{poc_id}/add-contributor")
+async def add_contributor_directly(
+    poc_id: str,
+    userId: str = Form(...),
+    current_user=Depends(require_roles("admin")),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    poc = await fetch_poc_or_404(db, poc_id)
+    enforce_admin_track_access(current_user, str(poc.get("track") or ""))
+
+    if poc.get("status") not in {"published", "live"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Contributors can only be added to published or live contributions")
+
+    if not ObjectId.is_valid(userId):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid user id")
+
+    target_user = await db.users.find_one({"_id": ObjectId(userId)})
+    if not target_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if target_user.get("role") == "admin":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Admins cannot be added as contributors")
+
+    target_user_id = ObjectId(userId)
+    approved_ids = {str(uid) for uid in (poc.get("approvedUsers") or [])}
+    if str(target_user_id) in approved_ids:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User is already an approved contributor")
+
+    now = datetime.now(timezone.utc)
     await db.pocs.update_one(
         {"_id": ObjectId(poc_id)},
         {
-            "$pull": {"approvedUsers": target_user_id, "approvedDetails": {"userId": target_user_id}},
-            "$set": {"updatedAt": datetime.now(timezone.utc)},
+            "$addToSet": {"votes": target_user_id, "approvedUsers": target_user_id, "directlyAddedUserIds": target_user_id},
+            "$set": {"updatedAt": now},
         },
     )
-    return {"message": "User unapproved"}
+    await db.pocs.update_one(
+        {"_id": ObjectId(poc_id)},
+        {"$pull": {"approvedDetails": {"userId": target_user_id}}},
+    )
+    await db.pocs.update_one(
+        {"_id": ObjectId(poc_id)},
+        {"$push": {"approvedDetails": {"userId": target_user_id, "approvedAt": now}}},
+    )
+    return {"message": "Contributor added"}
+
+
+VALID_PERFORMANCE_CATEGORIES = {"Exceeds", "Meets", "Does Not Meet"}
 
 
 @router.post("/{poc_id}/admin-feedback")
@@ -1330,7 +1419,7 @@ async def add_admin_feedback(
     poc_id: str,
     userId: str = Form(...),
     feedback: str = Form(...),
-    rating: int = Form(...),
+    performanceCategory: str = Form(...),
     current_user=Depends(require_roles("admin")),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
@@ -1343,8 +1432,8 @@ async def add_admin_feedback(
         )
     if not ObjectId.is_valid(userId):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid user id")
-    if rating < 1 or rating > 5:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Rating must be between 1 and 5")
+    if performanceCategory not in VALID_PERFORMANCE_CATEGORIES:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Performance category must be Exceeds, Meets, or Does Not Meet")
 
     target_user_id = ObjectId(userId)
     approved_ids = {str(value) for value in (poc.get("approvedUsers") or [])}
@@ -1367,7 +1456,7 @@ async def add_admin_feedback(
         "userName": str(target_user.get("name") or "").strip(),
         "userEmail": str(target_user.get("email") or "").strip(),
         "feedback": cleaned_feedback,
-        "rating": int(rating),
+        "performanceCategory": performanceCategory,
         "givenById": given_by_id,
         "givenByName": str(current_user.get("name") or "").strip(),
         "givenByEmail": str(current_user.get("email") or "").strip(),
@@ -1435,3 +1524,216 @@ async def add_user_feedback(
         {"$push": {"userFeedbacks": feedback_doc}},
     )
     return {"message": "Your feedback has been saved"}
+
+
+async def _hours_summary(db: AsyncIOMotorDatabase, poc_oid: ObjectId, user_oid: ObjectId) -> dict[str, Any]:
+    pipeline = [
+        {"$match": {"pocId": poc_oid, "userId": user_oid}},
+        {"$group": {"_id": None, "totalHours": {"$sum": "$hours"}, "lastUpdatedAt": {"$max": "$updatedAt"}}},
+    ]
+    agg = await db.contribution_hours.aggregate(pipeline).to_list(1)
+    today = get_today_ist()
+    today_raw = await db.contribution_hours.find(
+        {"pocId": poc_oid, "userId": user_oid, "date": today, "startTime": {"$exists": True}}
+    ).sort("startTime", 1).to_list(None)
+    today_slots = [
+        {"id": str(s["_id"]), "startTime": s["startTime"], "endTime": s["endTime"], "hours": float(s["hours"])}
+        for s in today_raw
+    ]
+    return {
+        "totalHours": float(agg[0]["totalHours"]) if agg else 0.0,
+        "lastUpdatedAt": agg[0]["lastUpdatedAt"].isoformat() if agg and agg[0]["lastUpdatedAt"] else None,
+        "todaySlots": today_slots,
+        "todayHours": sum(s["hours"] for s in today_slots),
+    }
+
+
+@router.get("/{poc_id}/my-hours")
+async def get_my_hours(
+    poc_id: str,
+    current_user=Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    poc = await fetch_poc_or_404(db, poc_id)
+    if not is_user_approved_for_poc(poc, current_user["id"]):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only approved contributors can view their hours")
+    if not ObjectId.is_valid(current_user["id"]):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
+    summary = await _hours_summary(db, ObjectId(poc_id), ObjectId(current_user["id"]))
+    return summary
+
+
+@router.post("/{poc_id}/log-hours")
+async def log_hours(
+    poc_id: str,
+    startTime: str = Form(...),
+    endTime: str = Form(...),
+    current_user=Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    poc = await fetch_poc_or_404(db, poc_id)
+    if poc.get("status") != "live":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Hours can only be logged for live contributions")
+    if not is_user_approved_for_poc(poc, current_user["id"]):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only approved contributors can log hours")
+
+    parse_hhmm(startTime, "Start time")
+    parse_hhmm(endTime, "End time")
+    if startTime >= endTime:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="End time must be after start time")
+
+    now_ist = get_now_ist_time()
+    if endTime > now_ist:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"End time cannot be in the future (current IST time: {now_ist})")
+
+    sh, sm = map(int, startTime.split(":"))
+    eh, em = map(int, endTime.split(":"))
+    hours = (eh * 60 + em - sh * 60 - sm) / 60.0
+
+    poc_oid = ObjectId(poc_id)
+    user_oid = ObjectId(current_user["id"])
+    today = get_today_ist()
+
+    existing = await db.contribution_hours.find({"pocId": poc_oid, "userId": user_oid, "date": today, "startTime": {"$exists": True}}).to_list(None)
+    for slot in existing:
+        if times_overlap(slot["startTime"], slot["endTime"], startTime, endTime):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Time overlaps with existing entry {slot['startTime']}–{slot['endTime']}",
+            )
+
+    now = datetime.now(timezone.utc)
+    await db.contribution_hours.insert_one({
+        "pocId": poc_oid,
+        "userId": user_oid,
+        "date": today,
+        "startTime": startTime,
+        "endTime": endTime,
+        "hours": hours,
+        "createdAt": now,
+        "updatedAt": now,
+    })
+
+    summary = await _hours_summary(db, poc_oid, user_oid)
+    return {"message": "Hours logged successfully", **summary}
+
+
+@router.put("/{poc_id}/log-hours/{slot_id}")
+async def update_hour_slot(
+    poc_id: str,
+    slot_id: str,
+    startTime: str = Form(...),
+    endTime: str = Form(...),
+    current_user=Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    if not ObjectId.is_valid(slot_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Slot not found")
+    poc = await fetch_poc_or_404(db, poc_id)
+    if poc.get("status") != "live":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Can only modify hours for live contributions")
+
+    poc_oid = ObjectId(poc_id)
+    user_oid = ObjectId(current_user["id"])
+    slot = await db.contribution_hours.find_one({"_id": ObjectId(slot_id), "pocId": poc_oid, "userId": user_oid})
+    if not slot:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Slot not found")
+
+    parse_hhmm(startTime, "Start time")
+    parse_hhmm(endTime, "End time")
+    if startTime >= endTime:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="End time must be after start time")
+
+    now_ist = get_now_ist_time()
+    if endTime > now_ist:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"End time cannot be in the future (current IST time: {now_ist})")
+
+    sh, sm = map(int, startTime.split(":"))
+    eh, em = map(int, endTime.split(":"))
+    hours = (eh * 60 + em - sh * 60 - sm) / 60.0
+
+    others = await db.contribution_hours.find(
+        {"pocId": poc_oid, "userId": user_oid, "date": slot["date"], "_id": {"$ne": ObjectId(slot_id)}, "startTime": {"$exists": True}}
+    ).to_list(None)
+    for s in others:
+        if times_overlap(s["startTime"], s["endTime"], startTime, endTime):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Time overlaps with existing entry {s['startTime']}–{s['endTime']}",
+            )
+
+    now = datetime.now(timezone.utc)
+    await db.contribution_hours.update_one(
+        {"_id": ObjectId(slot_id)},
+        {"$set": {"startTime": startTime, "endTime": endTime, "hours": hours, "updatedAt": now}},
+    )
+
+    summary = await _hours_summary(db, poc_oid, user_oid)
+    return {"message": "Slot updated", **summary}
+
+
+@router.get("/{poc_id}/hours-summary")
+async def get_hours_summary(
+    poc_id: str,
+    current_user=Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    if not ObjectId.is_valid(poc_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contribution not found")
+    poc = await fetch_poc_or_404(db, poc_id)
+    poc_oid = ObjectId(poc_id)
+    is_owner = str(poc.get("author")) == current_user["id"]
+    if current_user.get("role") != "admin" and not is_owner:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the owner or admin can view contributor hours")
+
+    pipeline = [
+        {"$match": {"pocId": poc_oid}},
+        {"$group": {"_id": "$userId", "totalHours": {"$sum": "$hours"}, "lastUpdatedAt": {"$max": "$updatedAt"}}},
+    ]
+    agg = await db.contribution_hours.aggregate(pipeline).to_list(None)
+
+    hours_approvals = [str(uid) for uid in (poc.get("hoursApprovals") or [])]
+    approved_user_ids = [str(uid) for uid in (poc.get("approvedUsers") or [])] + [str(uid) for uid in (poc.get("creditsAwardedUserIds") or [])]
+
+    result = []
+    for entry in agg:
+        user_doc = await db.users.find_one({"_id": entry["_id"]}, {"name": 1, "firstName": 1, "lastName": 1, "email": 1})
+        if not user_doc:
+            continue
+        name = user_doc.get("name") or f"{user_doc.get('firstName', '')} {user_doc.get('lastName', '')}".strip() or "Unknown"
+        result.append({
+            "userId": str(entry["_id"]),
+            "name": name,
+            "email": user_doc.get("email", ""),
+            "totalHours": float(entry["totalHours"]),
+            "lastUpdatedAt": entry["lastUpdatedAt"].isoformat() if entry.get("lastUpdatedAt") else None,
+            "isContributor": str(entry["_id"]) in approved_user_ids,
+            "hoursApproved": str(entry["_id"]) in hours_approvals,
+        })
+
+    return {"contributors": result}
+
+
+@router.post("/{poc_id}/approve-contributor-hours")
+async def approve_contributor_hours(
+    poc_id: str,
+    userId: str = Form(...),
+    current_user=Depends(get_current_user),
+    db: AsyncIOMotorDatabase = Depends(get_db),
+):
+    if not ObjectId.is_valid(poc_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contribution not found")
+    poc = await fetch_poc_or_404(db, poc_id)
+    if poc.get("status") != "finished":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Hours can only be approved for finished contributions")
+    is_owner = str(poc.get("author")) == current_user["id"]
+    if current_user.get("role") != "admin" and not is_owner:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the owner or admin can approve hours")
+    if not ObjectId.is_valid(userId):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid userId")
+
+    await db.pocs.update_one(
+        {"_id": ObjectId(poc_id)},
+        {"$addToSet": {"hoursApprovals": ObjectId(userId)}},
+    )
+    return {"message": "Hours approved"}

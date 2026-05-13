@@ -15,8 +15,8 @@ import { getThumbnailGradient } from '../utils/thumbnailGradient';
 import { getTrackIconSrc } from '../utils/trackIcons';
 import { getAssignedAdminTrack, isSuperAdmin } from '../utils/access';
 
-const STATUS_OPTIONS = ['all', 'published', 'live', 'draft', 'finished', 'cancelled'];
-const VIEWER_STATUS_OPTIONS = ['published', 'live', 'finished'];
+const STATUS_OPTIONS = ['all', 'finished', 'live', 'published', 'draft', 'cancelled'];
+const VIEWER_STATUS_OPTIONS = ['all', 'finished', 'live', 'published'];
 const IMPACT_OPTIONS = ['all', 'High', 'Medium', 'Low'];
 const AVAILABILITY_UNITS = ['per day', 'per week'];
 const TRACK_OPTIONS = [
@@ -50,7 +50,11 @@ export default function PocList() {
         ? 'all'
         : canUseStatusFilters
         ? (STATUS_OPTIONS.includes(statusFromUrl) ? statusFromUrl : 'all')
-        : (VIEWER_STATUS_OPTIONS.includes(statusFromUrl) ? statusFromUrl : 'published');
+        : involvedFromUrl && !statusFromUrl
+        ? 'live'
+        : interestedFromUrl && !statusFromUrl
+        ? 'all'
+        : (VIEWER_STATUS_OPTIONS.includes(statusFromUrl) ? statusFromUrl : 'finished');
     const isLockedCancelledTrackView = isTrackSubAdmin && initialStatus === 'cancelled';
     const initialTrack = isLockedCancelledTrackView
         ? assignedAdminTrack
@@ -291,7 +295,7 @@ export default function PocList() {
                 <div>
                     <h1 className="text-2xl font-bold text-charcoal-800">Contribution Briefs</h1>
                     <p className="text-charcoal-500 text-sm mt-0.5">
-                        {pagination.total} contribution brief{pagination.total !== 1 ? 's' : ''} total
+                        {pagination.total} Project{pagination.total !== 1 ? 's' : ''} total
                     </p>
                 </div>
                 {(user?.role === 'admin' || user?.role === 'developer') && (
@@ -363,11 +367,13 @@ export default function PocList() {
                                             } else if (option.value === true) {
                                                 setInterestedOnly(true);
                                                 setInvolvedOnly(false);
-                                                syncParams({ interested: true, involved: false });
+                                                setStatusFilter('all');
+                                                syncParams({ interested: true, involved: false, status: 'all' });
                                             } else {
                                                 setInterestedOnly(false);
                                                 setInvolvedOnly(true);
-                                                syncParams({ interested: false, involved: true });
+                                                setStatusFilter('live');
+                                                syncParams({ interested: false, involved: true, status: 'live' });
                                             }
                                         }}
                                     >
@@ -458,11 +464,11 @@ export default function PocList() {
             >
                 <div className="space-y-4">
                     <p className="text-sm text-charcoal-600">
-                        Tell the team how many hours you are free to work on{' '}
+                        Let the team know how much time you can contribute to {' '}
                         <span className="font-semibold text-charcoal-800">{selectedInterestPoc?.title}</span>.
                     </p>
                     <div className="space-y-1.5">
-                        <label className="block text-sm font-medium text-charcoal-700">How many hours are you free?</label>
+                        <label className="block text-sm font-medium text-charcoal-700">Please enter the hours</label>
                         <div className="flex gap-3">
                             <Input
                                 type="number"

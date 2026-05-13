@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/authStore';
-import { pocService } from '../services/endpoints';
+import { pocService, userService } from '../services/endpoints';
 import Badge from '../components/ui/Badge';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
@@ -58,7 +58,7 @@ const harmonicMean = (a, b) => {
     if (!Number.isFinite(x) || !Number.isFinite(y) || x <= 0 || y <= 0) return 0;
     return (2 * x * y) / (x + y);
 };
-const STAR_OPTIONS = [1, 2, 3, 4, 5];
+const PERFORMANCE_CATEGORIES = ['Exceeds', 'Meets', 'Does Not Meet'];
 
 export default function PocDetail() {
     const { id } = useParams();
@@ -86,13 +86,28 @@ export default function PocDetail() {
     const [votersError, setVotersError] = useState('');
     const [approvalUserId, setApprovalUserId] = useState('');
     const [usersPanelTab, setUsersPanelTab] = useState('interested');
+    const [showDirectAdd, setShowDirectAdd] = useState(false);
+    const [directAddSearch, setDirectAddSearch] = useState('');
+    const [directAddUsers, setDirectAddUsers] = useState([]);
+    const [directAddLoading, setDirectAddLoading] = useState(false);
+    const [directAddingId, setDirectAddingId] = useState('');
+    const [directAddError, setDirectAddError] = useState('');
     const [selectedFeedbackUserId, setSelectedFeedbackUserId] = useState('');
     const [adminFeedbackText, setAdminFeedbackText] = useState('');
-    const [adminFeedbackRating, setAdminFeedbackRating] = useState(0);
+    const [adminFeedbackCategory, setAdminFeedbackCategory] = useState('');
     const [userFeedbackText, setUserFeedbackText] = useState('');
     const [savingAdminFeedback, setSavingAdminFeedback] = useState(false);
     const [savingUserFeedback, setSavingUserFeedback] = useState(false);
     const [feedbackListTab, setFeedbackListTab] = useState('admin');
+    const [myHoursData, setMyHoursData] = useState(null);
+    const [slotStart, setSlotStart] = useState('');
+    const [slotEnd, setSlotEnd] = useState('');
+    const [editingSlotId, setEditingSlotId] = useState('');
+    const [loggingHours, setLoggingHours] = useState(false);
+    const [hoursError, setHoursError] = useState('');
+    const [hoursSummary, setHoursSummary] = useState(null);
+    const [hoursSummaryLoading, setHoursSummaryLoading] = useState(false);
+    const [approvingUserId, setApprovingUserId] = useState('');
 
     const fetchPoc = useCallback(async () => {
         setLoading(true);
@@ -117,7 +132,6 @@ export default function PocDetail() {
     const canAdminManageTrack =
         user?.role === 'admin' &&
         (isSuperAdmin(user) || !adminTrack || poc?.track === adminTrack);
-    const canEdit = canAdminManageTrack || (user?.role === 'developer' && isOwner);
     const currentUserId = user?._id || user?.id;
     const currentUserEmail = String(user?.email || '').trim().toLowerCase();
     const currentUserName = String(user?.name || '').trim().toLowerCase();
@@ -126,28 +140,28 @@ export default function PocDetail() {
         pointOfContactValue &&
         ((currentUserEmail && pointOfContactValue === currentUserEmail) || (currentUserName && pointOfContactValue === currentUserName))
     );
+    // POC contact users get the same management rights as an admin for their contribution
+    const canManage = canAdminManageTrack || isPocContactUser;
+    const canEdit = canManage || (user?.role === 'developer' && isOwner);
     const cancelledById =
         typeof poc?.cancelledBy === 'object'
             ? (poc?.cancelledBy?._id || poc?.cancelledBy?.id)
             : poc?.cancelledBy;
     const canEditContribution = canEdit && poc?.status !== 'cancelled';
-    const canFinish = canAdminManageTrack && poc?.status === 'live';
-    const canStartLive = canAdminManageTrack && poc?.status === 'published';
-    const canMoveToDraft = canAdminManageTrack && (poc?.status === 'published' || poc?.status === 'live');
-    const canCancel = canAdminManageTrack && ['draft', 'published', 'live'].includes(poc?.status);
-    const canEditCancelReason =
-        canAdminManageTrack &&
-        poc?.status === 'cancelled' &&
-        cancelledById &&
-        String(cancelledById) === String(currentUserId);
+    const canFinish = canManage && poc?.status === 'live';
+    const canStartLive = canManage && poc?.status === 'published';
+    const canMoveToDraft = canManage && (poc?.status === 'published' || poc?.status === 'live');
+    const canCancel = canManage && ['draft', 'published', 'live'].includes(poc?.status);
+    const canEditCancelReason = canManage && poc?.status === 'cancelled';
     const currentUserIsApproved =
         (poc?.approvedUsers || []).some((approvedId) => String(approvedId) === String(currentUserId)) ||
         (poc?.creditsAwardedUserIds || []).some((approvedId) => String(approvedId) === String(currentUserId));
-    const canVote = poc?.status === 'published' && user?.role !== 'admin' && !isOwner;
+    const canVote = poc?.status === 'published' && user?.role !== 'admin' && !isOwner && !isPocContactUser;
     const canViewApprovedTeammates = user?.role === 'viewer' && currentUserIsApproved;
     const canViewVoters = user?.role === 'admin' || isOwner || canViewApprovedTeammates || isPocContactUser;
     const isTeammateViewer = canViewApprovedTeammates && !isOwner && !isPocContactUser;
-    const canManageApprovals = canAdminManageTrack;
+    const canManageApprovals = canManage;
+    const canDirectAdd = canManage && (poc?.status === 'published' || poc?.status === 'live');
     const authorName = getAuthorName(poc?.author);
     const interestedUsers = voters.filter((voter) => !voter.isApproved);
     const approvedUsers = voters.filter((voter) => voter.isApproved);
@@ -173,7 +187,7 @@ export default function PocDetail() {
         participantMap.set(userId, { id: userId, name: item?.userName || 'User', email: item?.userEmail || '' });
     });
     const participantOptions = Array.from(participantMap.values());
-    const canGiveAdminFeedback = canAdminManageTrack && poc?.status === 'finished';
+    const canGiveAdminFeedback = canManage && poc?.status === 'finished';
     const canGiveUserFeedback = currentUserIsApproved && poc?.status === 'finished' && user?.role !== 'admin';
     const myExistingUserFeedback = userFeedbacks.find((item) => String(item?.userId) === String(currentUserId));
     const selectedFeedbackUser = participantOptions.find(
@@ -209,6 +223,101 @@ export default function PocDetail() {
         if (canViewVoters) fetchVoters();
     }, [canViewVoters, fetchVoters]);
 
+    const canLogHours = poc?.status === 'live' && currentUserIsApproved && user?.role !== 'admin';
+    const canViewHoursSummary = (poc?.status === 'live' || poc?.status === 'finished') && (user?.role === 'admin' || isOwner || isPocContactUser);
+
+    const fetchMyHours = useCallback(async () => {
+        if (!id || !currentUserIsApproved) return;
+        try {
+            const { data } = await pocService.getMyHours(id);
+            setMyHoursData(data);
+        } catch {
+            // silently ignore — not critical
+        }
+    }, [id, currentUserIsApproved]);
+
+    useEffect(() => {
+        if (currentUserIsApproved) fetchMyHours();
+    }, [currentUserIsApproved, fetchMyHours]);
+
+    const fetchHoursSummary = useCallback(async () => {
+        if (!id || !canViewHoursSummary) return;
+        setHoursSummaryLoading(true);
+        try {
+            const { data } = await pocService.getHoursSummary(id);
+            setHoursSummary(data.contributors || []);
+        } catch {
+            setHoursSummary([]);
+        } finally {
+            setHoursSummaryLoading(false);
+        }
+    }, [id, canViewHoursSummary]);
+
+    useEffect(() => {
+        if (canViewHoursSummary) fetchHoursSummary();
+    }, [canViewHoursSummary, fetchHoursSummary]);
+
+    const handleAddSlot = async () => {
+        setHoursError('');
+        if (!slotStart || !slotEnd) { setHoursError('Select both start and end time'); return; }
+        if (slotStart >= slotEnd) { setHoursError('End time must be after start time'); return; }
+        setLoggingHours(true);
+        try {
+            const { data } = await pocService.logHours(id, { startTime: slotStart, endTime: slotEnd });
+            setMyHoursData(data);
+            setSlotStart('');
+            setSlotEnd('');
+        } catch (err) {
+            setHoursError(getApiErrorMessage(err, 'Failed to log hours'));
+        } finally {
+            setLoggingHours(false);
+        }
+    };
+
+    const handleStartEditSlot = (slot) => {
+        setEditingSlotId(slot.id);
+        setSlotStart(slot.startTime);
+        setSlotEnd(slot.endTime);
+        setHoursError('');
+    };
+
+    const handleUpdateSlot = async () => {
+        setHoursError('');
+        if (!slotStart || !slotEnd) { setHoursError('Select both start and end time'); return; }
+        if (slotStart >= slotEnd) { setHoursError('End time must be after start time'); return; }
+        setLoggingHours(true);
+        try {
+            const { data } = await pocService.updateHourSlot(id, editingSlotId, { startTime: slotStart, endTime: slotEnd });
+            setMyHoursData(data);
+            setEditingSlotId('');
+            setSlotStart('');
+            setSlotEnd('');
+        } catch (err) {
+            setHoursError(getApiErrorMessage(err, 'Failed to update slot'));
+        } finally {
+            setLoggingHours(false);
+        }
+    };
+
+    const handleCancelSlotEdit = () => {
+        setEditingSlotId('');
+        setSlotStart('');
+        setSlotEnd('');
+        setHoursError('');
+    };
+
+    const handleApproveHours = async (userId) => {
+        setApprovingUserId(userId);
+        try {
+            await pocService.approveContributorHours(id, userId);
+            setHoursSummary((prev) => prev.map((c) => c.userId === userId ? { ...c, hoursApproved: true } : c));
+        } catch (err) {
+            setHoursError(getApiErrorMessage(err, 'Failed to approve hours'));
+        } finally {
+            setApprovingUserId('');
+        }
+    };
+
     useEffect(() => {
         if (isTeammateViewer) setUsersPanelTab('approved');
     }, [isTeammateViewer]);
@@ -226,13 +335,13 @@ export default function PocDetail() {
     useEffect(() => {
         if (!selectedFeedbackUserId) {
             setAdminFeedbackText('');
-            setAdminFeedbackRating(0);
+            setAdminFeedbackCategory('');
             return;
         }
         setAdminFeedbackText(myExistingAdminFeedback?.feedback || '');
-        const savedRating = Number(myExistingAdminFeedback?.rating || 0);
-        setAdminFeedbackRating(savedRating >= 1 && savedRating <= 5 ? savedRating : 0);
-    }, [selectedFeedbackUserId, myExistingAdminFeedback?.feedback, myExistingAdminFeedback?.rating]);
+        const savedCategory = myExistingAdminFeedback?.performanceCategory || '';
+        setAdminFeedbackCategory(PERFORMANCE_CATEGORIES.includes(savedCategory) ? savedCategory : '');
+    }, [selectedFeedbackUserId, myExistingAdminFeedback?.feedback, myExistingAdminFeedback?.performanceCategory]);
 
     const handleCancelIdea = () => {
         setCancelReason('');
@@ -391,6 +500,47 @@ export default function PocDetail() {
         }
     };
 
+    const handleOpenDirectAdd = () => {
+        if (showDirectAdd) {
+            setShowDirectAdd(false);
+            setDirectAddSearch('');
+            setDirectAddUsers([]);
+            setDirectAddError('');
+        } else {
+            setShowDirectAdd(true);
+        }
+    };
+
+    const handleDirectAddSearch = async (value) => {
+        setDirectAddSearch(value);
+        setDirectAddError('');
+        if (!value.trim()) { setDirectAddUsers([]); return; }
+        setDirectAddLoading(true);
+        try {
+            const { data } = await userService.getDirectory({ search: value, limit: 25 });
+            setDirectAddUsers(data.users || []);
+        } catch {
+            setDirectAddError('Failed to search users');
+        } finally {
+            setDirectAddLoading(false);
+        }
+    };
+
+    const handleDirectAdd = async (targetUserId) => {
+        if (!poc?._id || !targetUserId) return;
+        setDirectAddingId(targetUserId);
+        setDirectAddError('');
+        try {
+            await pocService.addContributor(poc._id, targetUserId);
+            await fetchVoters();
+            setDirectAddSearch('');
+        } catch (err) {
+            setDirectAddError(getApiErrorMessage(err, 'Failed to add contributor'));
+        } finally {
+            setDirectAddingId('');
+        }
+    };
+
     const handleMarkFinished = async () => {
         if (!poc?._id || !canFinish) return;
         setFinishing(true);
@@ -440,16 +590,16 @@ export default function PocDetail() {
             setError('Please enter performance feedback');
             return;
         }
-        if (!Number.isInteger(adminFeedbackRating) || adminFeedbackRating < 1 || adminFeedbackRating > 5) {
-            setError('Please provide a rating between 1 and 5 stars');
+        if (!adminFeedbackCategory) {
+            setError('Please select a performance category');
             return;
         }
         setSavingAdminFeedback(true);
         setError('');
         try {
-            await pocService.addAdminFeedback(poc._id, selectedFeedbackUserId, adminFeedbackText.trim(), adminFeedbackRating);
+            await pocService.addAdminFeedback(poc._id, selectedFeedbackUserId, adminFeedbackText.trim(), adminFeedbackCategory);
             setAdminFeedbackText('');
-            setAdminFeedbackRating(0);
+            setAdminFeedbackCategory('');
             await fetchPoc();
         } catch (err) {
             setError(getApiErrorMessage(err, 'Failed to save admin feedback'));
@@ -613,6 +763,10 @@ export default function PocDetail() {
                         <p className="text-sm text-charcoal-700">{poc.impact || '-'}</p>
                     </div>
                     <div className="space-y-1">
+                        <p className="text-xs uppercase tracking-wide text-charcoal-400">Complexity</p>
+                        <p className="text-sm text-charcoal-700">{poc.complexity || '-'}</p>
+                    </div>
+                    <div className="space-y-1">
                         <p className="text-xs uppercase tracking-wide text-charcoal-400">Estimated Completion Time</p>
                         <p className="text-sm text-charcoal-700">
                             {poc.estimatedDurationValue && poc.estimatedDurationUnit
@@ -653,7 +807,7 @@ export default function PocDetail() {
                     </div>
                 )}
 
-                {showMyContributionMetrics && (
+                {/* {showMyContributionMetrics && (
                     <div className="rounded-xl border border-indigo-200 bg-indigo-50/50 p-4">
                         <p className="text-xs uppercase tracking-wide text-indigo-700">My Contribution Metrics</p>
                         <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -669,7 +823,7 @@ export default function PocDetail() {
                             </div>
                         </div>
                     </div>
-                )}
+                )} */}
             </div>
 
             {poc.techStack?.length > 0 && (
@@ -680,6 +834,169 @@ export default function PocDetail() {
                             <Badge key={t} color="terracotta">{t}</Badge>
                         ))}
                     </div>
+                </div>
+            )}
+
+            {canLogHours && (() => {
+                const sh = slotStart ? parseInt(slotStart.split(':')[0]) * 60 + parseInt(slotStart.split(':')[1]) : 0;
+                const eh = slotEnd ? parseInt(slotEnd.split(':')[0]) * 60 + parseInt(slotEnd.split(':')[1]) : 0;
+                const durationMins = slotStart && slotEnd && eh > sh ? eh - sh : 0;
+                const durationLabel = durationMins > 0
+                    ? `${Math.floor(durationMins / 60)}h ${durationMins % 60 > 0 ? `${durationMins % 60}m` : ''}`.trim()
+                    : '';
+                return (
+                <div className="bg-white rounded-2xl border border-sand-200 p-6 space-y-5">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <h2 className="text-lg font-semibold text-charcoal-800">Log Your Hours</h2>
+                        {myHoursData?.lastUpdatedAt && (
+                            <span className="text-xs text-charcoal-400">
+                                Last updated: {formatIstDateTime(myHoursData.lastUpdatedAt)}
+                            </span>
+                        )}
+                    </div>
+
+                    {myHoursData && (
+                        <div className="flex items-center gap-6 rounded-xl border border-indigo-100 bg-indigo-50/50 px-4 py-3">
+                            <div>
+                                <p className="text-xs uppercase tracking-wide text-charcoal-400">Total Hours</p>
+                                <p className="text-xl font-bold text-charcoal-800">{myHoursData.totalHours.toFixed(1)}h</p>
+                            </div>
+                            <div>
+                                <p className="text-xs uppercase tracking-wide text-charcoal-400">Today</p>
+                                <p className="text-xl font-bold text-indigo-600">{(myHoursData.todayHours || 0).toFixed(1)}h</p>
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="space-y-3">
+                        <p className="text-sm font-medium text-charcoal-700">
+                            {editingSlotId ? 'Edit time slot' : 'Add time worked'}
+                        </p>
+                        <div className="flex flex-wrap items-end gap-3">
+                            <div className="space-y-1">
+                                <label className="block text-xs text-charcoal-500">Start</label>
+                                <input
+                                    type="time"
+                                    value={slotStart}
+                                    onChange={(e) => { setSlotStart(e.target.value); setHoursError(''); }}
+                                    className="rounded-xl border border-sand-300 bg-white px-3 py-2.5 text-sm text-charcoal-800 focus:border-terracotta-400 focus:ring-2 focus:ring-terracotta-100 focus:outline-none transition-all duration-200"
+                                />
+                            </div>
+                            <div className="space-y-1">
+                                <label className="block text-xs text-charcoal-500">End</label>
+                                <input
+                                    type="time"
+                                    value={slotEnd}
+                                    onChange={(e) => { setSlotEnd(e.target.value); setHoursError(''); }}
+                                    className="rounded-xl border border-sand-300 bg-white px-3 py-2.5 text-sm text-charcoal-800 focus:border-terracotta-400 focus:ring-2 focus:ring-terracotta-100 focus:outline-none transition-all duration-200"
+                                />
+                            </div>
+                            {durationLabel && (
+                                <span className="text-sm font-semibold text-indigo-600 pb-2.5">{durationLabel}</span>
+                            )}
+                            <div className="flex gap-2 pb-0.5">
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    loading={loggingHours}
+                                    onClick={editingSlotId ? handleUpdateSlot : handleAddSlot}
+                                >
+                                    {editingSlotId ? 'Update' : 'Add Slot'}
+                                </Button>
+                                {editingSlotId && (
+                                    <Button type="button" size="sm" variant="ghost" onClick={handleCancelSlotEdit}>
+                                        Cancel
+                                    </Button>
+                                )}
+                            </div>
+                        </div>
+                        {hoursError && <p className="text-xs text-coral-600">{hoursError}</p>}
+                    </div>
+
+                    {myHoursData?.todaySlots?.length > 0 && (
+                        <div className="space-y-2">
+                            <p className="text-xs uppercase tracking-wide text-charcoal-400">Today&apos;s entries</p>
+                            <div className="space-y-1.5">
+                                {myHoursData.todaySlots.map((slot) => (
+                                    <div
+                                        key={slot.id}
+                                        className={`flex items-center justify-between rounded-xl border px-3 py-2 ${
+                                            editingSlotId === slot.id
+                                                ? 'border-terracotta-300 bg-terracotta-50/40'
+                                                : 'border-sand-200 bg-sand-50/40'
+                                        }`}
+                                    >
+                                        <span className="text-sm text-charcoal-800">
+                                            {slot.startTime} → {slot.endTime}
+                                            <span className="ml-2 text-xs text-charcoal-500">({slot.hours.toFixed(1)}h)</span>
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleStartEditSlot(slot)}
+                                            className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                                        >
+                                            Edit
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+                );
+            })()}
+
+            {canViewHoursSummary && (
+                <div className="bg-white rounded-2xl border border-sand-200 p-6 space-y-4">
+                    <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <h2 className="text-lg font-semibold text-charcoal-800">Contribution Hours</h2>
+                        {poc.status === 'finished' && (
+                            <span className="text-xs text-charcoal-500">Approve hours for finished contributors</span>
+                        )}
+                    </div>
+                    {hoursSummaryLoading ? (
+                        <div className="flex justify-center py-4"><Spinner /></div>
+                    ) : !hoursSummary || hoursSummary.length === 0 ? (
+                        <p className="text-sm text-charcoal-500 rounded-xl border border-dashed border-sand-300 bg-sand-50 px-3 py-4">
+                            No hours logged by contributors yet.
+                        </p>
+                    ) : (
+                        <div className="space-y-3">
+                            {hoursSummary.map((contributor) => (
+                                <div
+                                    key={contributor.userId}
+                                    className="flex items-center justify-between rounded-xl border border-sand-200 bg-sand-50/40 px-4 py-3"
+                                >
+                                    <div className="min-w-0">
+                                        <span className="block text-sm font-medium text-charcoal-800 truncate">{contributor.name}</span>
+                                        <span className="block text-xs text-charcoal-500 truncate">{contributor.email}</span>
+                                        <span className="block text-xs text-charcoal-400 mt-0.5">
+                                            {contributor.totalHours.toFixed(1)}h total
+                                            {contributor.lastUpdatedAt ? ` · last updated ${formatIstDateTime(contributor.lastUpdatedAt)}` : ''}
+                                        </span>
+                                    </div>
+                                    <div className="shrink-0 ml-3">
+                                        {contributor.hoursApproved ? (
+                                            <Badge color="green">Approved</Badge>
+                                        ) : poc.status === 'finished' ? (
+                                            <Button
+                                                type="button"
+                                                size="sm"
+                                                variant="outline"
+                                                className="border-emerald-500 text-emerald-700 hover:bg-emerald-50 whitespace-nowrap"
+                                                loading={approvingUserId === contributor.userId}
+                                                onClick={() => handleApproveHours(contributor.userId)}
+                                            >
+                                                Approve
+                                            </Button>
+                                        ) : (
+                                            <span className="text-xs text-charcoal-400">Pending</span>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -723,10 +1040,71 @@ export default function PocDetail() {
                         <h2 className="text-lg font-semibold text-charcoal-800">
                             {isTeammateViewer ? 'Approved Users' : 'Interested Users'}
                         </h2>
-                        <Button type="button" size="sm" variant="ghost" onClick={fetchVoters}>
-                            Refresh
-                        </Button>
+                        <div className="flex gap-2">
+                            {canDirectAdd && (
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant={showDirectAdd ? 'ghost' : 'outline'}
+                                    onClick={handleOpenDirectAdd}
+                                >
+                                    {showDirectAdd ? 'Cancel' : '+ Add Directly'}
+                                </Button>
+                            )}
+                            <Button type="button" size="sm" variant="ghost" onClick={fetchVoters}>
+                                Refresh
+                            </Button>
+                        </div>
                     </div>
+
+                    {canDirectAdd && showDirectAdd && (
+                        <div className="mb-4 rounded-xl border border-indigo-200 bg-indigo-50/40 p-4 space-y-3">
+                            <p className="text-sm font-medium text-charcoal-700">Add contributor directly</p>
+                            <input
+                                type="text"
+                                placeholder="Type a name or email to search…"
+                                value={directAddSearch}
+                                onChange={(e) => handleDirectAddSearch(e.target.value)}
+                                className="w-full rounded-xl border border-sand-300 bg-white px-3 py-2 text-sm text-charcoal-800 focus:border-terracotta-400 focus:ring-2 focus:ring-terracotta-100 focus:outline-none transition-all duration-200"
+                            />
+                            {directAddError && <p className="text-xs text-coral-600">{directAddError}</p>}
+                            {directAddLoading ? (
+                                <div className="flex justify-center py-2"><Spinner size="sm" /></div>
+                            ) : directAddSearch && directAddUsers.length === 0 ? (
+                                <p className="text-xs text-charcoal-500">No matching users found.</p>
+                            ) : (() => {
+                                const approvedIds = new Set(approvedUsers.map((v) => String(v._id || v.id)));
+                                const visible = directAddUsers.filter((u) => u.role !== 'admin' && !approvedIds.has(String(u._id || u.id)));
+                                if (!visible.length) return null;
+                                return (
+                                    <div className="max-h-48 overflow-y-auto space-y-1.5">
+                                        {visible.map((u) => {
+                                            const uid = String(u._id || u.id);
+                                            return (
+                                                <div key={uid} className="flex items-center justify-between rounded-lg border border-sand-200 bg-white px-3 py-2">
+                                                    <div className="min-w-0">
+                                                        <span className="block text-sm font-medium text-charcoal-800 truncate">{u.name}</span>
+                                                        <span className="block text-xs text-charcoal-500 truncate">{u.email}</span>
+                                                    </div>
+                                                    <Button
+                                                        type="button"
+                                                        size="sm"
+                                                        variant="outline"
+                                                        className="border-indigo-400 text-indigo-700 hover:bg-indigo-50 whitespace-nowrap ml-3"
+                                                        loading={directAddingId === uid}
+                                                        onClick={() => handleDirectAdd(uid)}
+                                                    >
+                                                        Add
+                                                    </Button>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                );
+                            })()}
+                        </div>
+                    )}
+
                     {votersLoading ? (
                         <Spinner size="sm" />
                     ) : votersError ? (
@@ -814,11 +1192,6 @@ export default function PocDetail() {
                                             <div className="min-w-0 pr-3">
                                                 <span className="block text-lg leading-5 font-medium text-charcoal-800 truncate">{voter.name}</span>
                                                 <span className="block text-sm text-charcoal-500 truncate">{voter.email}</span>
-                                                <span className="block text-sm text-charcoal-600 mt-1">
-                                                    {voter.availabilityValue && voter.availabilityUnit
-                                                        ? `${voter.availabilityValue} hours ${voter.availabilityUnit}`
-                                                        : 'Availability not shared'}
-                                                </span>
                                             </div>
                                             {canManageApprovals ? (
                                                 <Button
@@ -877,30 +1250,17 @@ export default function PocDetail() {
                                         </p>
                                     )}
                                     <div className="space-y-1">
-                                        <label className="text-xs uppercase tracking-wide text-charcoal-500">Performance Rating</label>
-                                        <div className="flex items-center gap-1.5">
-                                            {STAR_OPTIONS.map((starValue) => {
-                                                const active = starValue <= adminFeedbackRating;
-                                                return (
-                                                    <button
-                                                        key={`admin-rating-star-${starValue}`}
-                                                        type="button"
-                                                        onClick={() => setAdminFeedbackRating(starValue)}
-                                                        className={`rounded-md p-1.5 transition-colors ${
-                                                            active ? 'text-amber-500' : 'text-sand-400 hover:text-amber-400'
-                                                        }`}
-                                                        title={`${starValue} star${starValue > 1 ? 's' : ''}`}
-                                                    >
-                                                        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" aria-hidden="true">
-                                                            <path d="M12 2.5l2.95 5.98 6.6.96-4.77 4.65 1.13 6.57L12 17.56 6.09 20.66l1.13-6.57-4.77-4.65 6.6-.96L12 2.5z" />
-                                                        </svg>
-                                                    </button>
-                                                );
-                                            })}
-                                            <span className="ml-1 text-xs text-charcoal-600">
-                                                {adminFeedbackRating > 0 ? `${adminFeedbackRating}/5` : 'Select rating'}
-                                            </span>
-                                        </div>
+                                        <label className="text-xs uppercase tracking-wide text-charcoal-500">Performance Category</label>
+                                        <select
+                                            value={adminFeedbackCategory}
+                                            onChange={(e) => setAdminFeedbackCategory(e.target.value)}
+                                            className="w-full rounded-xl border border-blue-200 bg-white px-3 py-2.5 text-sm text-charcoal-800 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 focus:outline-none transition-all duration-200"
+                                        >
+                                            <option value="">Select category</option>
+                                            {PERFORMANCE_CATEGORIES.map((cat) => (
+                                                <option key={cat} value={cat}>{cat}</option>
+                                            ))}
+                                        </select>
                                     </div>
                                     <textarea
                                         value={adminFeedbackText}
@@ -976,21 +1336,14 @@ export default function PocDetail() {
                                                 <div className="min-w-0">
                                                     <p className="text-sm font-semibold text-charcoal-800 truncate">{item.userName || item.userEmail || 'User'}</p>
                                                     <p className="text-xs text-charcoal-500 truncate">By {item.givenByName || item.givenByEmail || 'Admin'}</p>
-                                                    {Number(item.rating || 0) >= 1 && Number(item.rating || 0) <= 5 && (
-                                                        <div className="mt-1 flex items-center gap-1">
-                                                            {STAR_OPTIONS.map((starValue) => (
-                                                                <svg
-                                                                    key={`feedback-star-${index}-${starValue}`}
-                                                                    viewBox="0 0 24 24"
-                                                                    className={`h-3.5 w-3.5 ${starValue <= Number(item.rating) ? 'text-amber-500' : 'text-sand-300'}`}
-                                                                    fill="currentColor"
-                                                                    aria-hidden="true"
-                                                                >
-                                                                    <path d="M12 2.5l2.95 5.98 6.6.96-4.77 4.65 1.13 6.57L12 17.56 6.09 20.66l1.13-6.57-4.77-4.65 6.6-.96L12 2.5z" />
-                                                                </svg>
-                                                            ))}
-                                                            <span className="text-[11px] text-charcoal-500">{Number(item.rating)}/5</span>
-                                                        </div>
+                                                    {item.performanceCategory && (
+                                                        <span className={`mt-1 inline-block text-[11px] font-medium px-2 py-0.5 rounded-full ${
+                                                            item.performanceCategory === 'Exceeds'
+                                                                ? 'bg-emerald-100 text-emerald-700'
+                                                                : item.performanceCategory === 'Meets'
+                                                                ? 'bg-blue-100 text-blue-700'
+                                                                : 'bg-red-100 text-red-700'
+                                                        }`}>{item.performanceCategory}</span>
                                                     )}
                                                 </div>
                                                 <span className="text-[11px] text-charcoal-400 whitespace-nowrap">
@@ -1028,10 +1381,10 @@ export default function PocDetail() {
             <Modal isOpen={interestModalOpen} onClose={() => !voting && setInterestModalOpen(false)} title="Share Your Availability" size="sm">
                 <div className="space-y-4">
                     <p className="text-sm text-charcoal-600">
-                        Tell the team how many hours you are free to work on <span className="font-semibold text-charcoal-800">{poc.title}</span>.
+                        Let the team know how much time you can contribute to <span className="font-semibold text-charcoal-800">{poc.title}</span>.
                     </p>
                     <div className="space-y-1.5">
-                        <label className="block text-sm font-medium text-charcoal-700">How many hours are you free?</label>
+                        <label className="block text-sm font-medium text-charcoal-700">Please enter the number of hours</label>
                         <div className="flex gap-3">
                             <Input
                                 type="number"

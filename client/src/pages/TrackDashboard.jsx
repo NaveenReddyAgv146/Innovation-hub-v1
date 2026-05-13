@@ -1,36 +1,43 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, Fragment } from 'react';
 import { Link } from 'react-router-dom';
 import useAuthStore from '../store/authStore';
-import { pocService } from '../services/endpoints';
+import { pocService, userService } from '../services/endpoints';
 import Card from '../components/ui/Card';
-import Badge from '../components/ui/Badge';
 import Spinner from '../components/ui/Spinner';
 import ErrorState from '../components/ui/ErrorState';
-import Button from '../components/ui/Button';
-import { getThumbnailGradient } from '../utils/thumbnailGradient';
 import { getAssignedAdminTrack } from '../utils/access';
 import { getTrackIconSrc } from '../utils/trackIcons';
 
-const getTitleWithTrack = (item = {}) => (item.track ? `${item.title} · ${item.track}` : item.title);
+const TRACK_ICON_BG = {
+    'Solutions': 'bg-indigo-600',
+    'Delivery': 'bg-blue-600',
+    'Learning': 'bg-green-600',
+    'GTM/Sales': 'bg-orange-500',
+    'Organizational Building & Thought Leadership': 'bg-slate-700',
+};
+
+const getTrackBadgeClass = (track) => {
+    if (track === 'Solutions') return 'bg-indigo-50 text-indigo-700 border border-indigo-200';
+    if (track === 'Delivery') return 'bg-blue-50 text-blue-700 border border-blue-200';
+    if (track === 'Learning') return 'bg-green-50 text-green-700 border border-green-200';
+    if (track === 'GTM/Sales') return 'bg-orange-50 text-orange-700 border border-orange-200';
+    return 'bg-slate-50 text-slate-700 border border-slate-200';
+};
+
+const getTrackShortLabel = (track) =>
+    track === 'Organizational Building & Thought Leadership' ? 'Thought Leadership' : track;
 
 export default function TrackDashboard() {
     const user = useAuthStore((s) => s.user);
     const track = getAssignedAdminTrack(user);
 
     const [stats, setStats] = useState({ total: 0, published: 0, live: 0, drafts: 0, finished: 0, cancelled: 0 });
-    const [animatedPublishedPct, setAnimatedPublishedPct] = useState(0);
-    const [animatedLivePct, setAnimatedLivePct] = useState(0);
-    const [animatedDraftPct, setAnimatedDraftPct] = useState(0);
-    const [animatedFinishedPct, setAnimatedFinishedPct] = useState(0);
-    const [animatedCancelledPct, setAnimatedCancelledPct] = useState(0);
-    const [recentPocs, setRecentPocs] = useState([]);
-    const [allPocs, setAllPocs] = useState([]);
-    const [pipelineFilter, setPipelineFilter] = useState(null);
+    const [pendingApprovals, setPendingApprovals] = useState([]);
+    const [recentSubmissions, setRecentSubmissions] = useState([]);
+    const [liveContributions, setLiveContributions] = useState([]);
+    const [topContributors, setTopContributors] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-
-    const pipelineResetTimerRef = useRef(null);
-    const animationFrameRef = useRef(null);
 
     const fetchDashboard = useCallback(async () => {
         if (!track) {
@@ -40,28 +47,40 @@ export default function TrackDashboard() {
         setLoading(true);
         setError('');
         try {
-            const baseParams = { track };
-            const recentRes = await pocService.getAll({ page: 1, limit: 5, ...baseParams });
-            const pocs = recentRes.data.pocs;
-            const total = recentRes.data.pagination.total;
-
-            const firstRes = await pocService.getAll({ page: 1, limit: 100, ...baseParams });
+            const firstRes = await pocService.getAll({ page: 1, limit: 100, track });
             let all = firstRes.data.pocs || [];
             const pages = firstRes.data.pagination?.pages || 1;
             for (let page = 2; page <= pages; page += 1) {
-                const res = await pocService.getAll({ page, limit: 100, ...baseParams });
+                const res = await pocService.getAll({ page, limit: 100, track });
                 all = all.concat(res.data.pocs || []);
             }
 
-            const published = all.filter((p) => p.status === 'published').length;
-            const live = all.filter((p) => p.status === 'live').length;
-            const drafts = all.filter((p) => p.status === 'draft').length;
-            const finished = all.filter((p) => p.status === 'finished').length;
-            const cancelled = all.filter((p) => p.status === 'cancelled').length;
+            setStats({
+                total: all.length,
+                published: all.filter((p) => p.status === 'published').length,
+                live: all.filter((p) => p.status === 'live').length,
+                drafts: all.filter((p) => p.status === 'draft').length,
+                finished: all.filter((p) => p.status === 'finished').length,
+                cancelled: all.filter((p) => p.status === 'cancelled').length,
+            });
 
-            setStats({ total, published, live, drafts, finished, cancelled });
-            setRecentPocs(pocs);
-            setAllPocs(all);
+            const [draftRes, publishedRes, liveRes, lbRes] = await Promise.all([
+                pocService.getAll({ page: 1, limit: 5, track, status: 'draft' }),
+                pocService.getAll({ page: 1, limit: 5, track, status: 'published' }),
+                pocService.getAll({ page: 1, limit: 5, track, status: 'live' }),
+                userService.getLeaderboard({ limit: 5, sortBy: 'credits', track }),
+            ]);
+
+            setPendingApprovals(
+                [...(draftRes.data.pocs || [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+            );
+            setRecentSubmissions(
+                [...(publishedRes.data.pocs || [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+            );
+            setLiveContributions(
+                [...(liveRes.data.pocs || [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+            );
+            setTopContributors(lbRes.data?.leaderboard || []);
         } catch {
             setError('Failed to load track dashboard');
         } finally {
@@ -71,47 +90,7 @@ export default function TrackDashboard() {
 
     useEffect(() => {
         fetchDashboard();
-        return () => {
-            if (pipelineResetTimerRef.current) clearTimeout(pipelineResetTimerRef.current);
-            if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-        };
     }, [fetchDashboard]);
-
-    useEffect(() => {
-        const targetPublished = stats.total ? (stats.published / stats.total) * 100 : 0;
-        const targetLive = stats.total ? (stats.live / stats.total) * 100 : 0;
-        const targetDraft = stats.total ? (stats.drafts / stats.total) * 100 : 0;
-        const targetFinished = stats.total ? (stats.finished / stats.total) * 100 : 0;
-        const targetCancelled = stats.total ? (stats.cancelled / stats.total) * 100 : 0;
-
-        const startPublished = animatedPublishedPct;
-        const startLive = animatedLivePct;
-        const startDraft = animatedDraftPct;
-        const startFinished = animatedFinishedPct;
-        const startCancelled = animatedCancelledPct;
-        const duration = 1000;
-        const start = performance.now();
-
-        const tick = (now) => {
-            const progress = Math.min((now - start) / duration, 1);
-            const eased = 1 - (1 - progress) ** 3;
-            setAnimatedPublishedPct(startPublished + (targetPublished - startPublished) * eased);
-            setAnimatedLivePct(startLive + (targetLive - startLive) * eased);
-            setAnimatedDraftPct(startDraft + (targetDraft - startDraft) * eased);
-            setAnimatedFinishedPct(startFinished + (targetFinished - startFinished) * eased);
-            setAnimatedCancelledPct(startCancelled + (targetCancelled - startCancelled) * eased);
-            if (progress < 1) {
-                animationFrameRef.current = requestAnimationFrame(tick);
-            }
-        };
-
-        if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = requestAnimationFrame(tick);
-
-        return () => {
-            if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-        };
-    }, [stats.total, stats.published, stats.live, stats.drafts, stats.finished, stats.cancelled]);
 
     if (loading) return <Spinner size="lg" className="mt-24" />;
     if (error) return <ErrorState message={error} onRetry={fetchDashboard} />;
@@ -125,308 +104,229 @@ export default function TrackDashboard() {
         );
     }
 
-    const publishedDeg = Math.max(0, Math.min(360, animatedPublishedPct * 3.6));
-    const liveDeg = Math.max(0, Math.min(360 - publishedDeg, animatedLivePct * 3.6));
-    const draftDeg = Math.max(0, Math.min(360 - publishedDeg - liveDeg, animatedDraftPct * 3.6));
-    const finishedStartDeg = publishedDeg + liveDeg + draftDeg;
-    const ringStyle = {
-        background: `conic-gradient(#7c3aed 0deg ${publishedDeg}deg, var(--color-terracotta-500) ${publishedDeg}deg ${publishedDeg + liveDeg}deg, var(--color-amber-500) ${publishedDeg + liveDeg}deg ${finishedStartDeg}deg, #16a34a ${finishedStartDeg}deg 360deg)`,
-    };
-
-    const activePipelineItems = pipelineFilter
-        ? allPocs.filter((poc) =>
-            pipelineFilter.status ? poc.status === pipelineFilter.status : true
-        )
-        : [];
-
-    const activePipelineTitle = pipelineFilter
-        ? `${pipelineFilter.status.charAt(0).toUpperCase() + pipelineFilter.status.slice(1)} Contributions`
-        : 'Contribution Pipeline';
-
-    const detectSegment = (event) => {
-        const rect = event.currentTarget.getBoundingClientRect();
-        const x = event.clientX - rect.left - rect.width / 2;
-        const y = event.clientY - rect.top - rect.height / 2;
-        const angleFromTop = (Math.atan2(y, x) * 180) / Math.PI + 90;
-        const normalized = (angleFromTop + 360) % 360;
-        if (normalized <= publishedDeg) return 'published';
-        if (normalized <= publishedDeg + liveDeg) return 'live';
-        if (normalized <= publishedDeg + liveDeg + draftDeg) return 'draft';
-        return 'finished';
-    };
-
-    const schedulePipelineReset = (force = false) => {
-        if (!force && !pipelineFilter) return;
-        if (pipelineResetTimerRef.current) clearTimeout(pipelineResetTimerRef.current);
-        pipelineResetTimerRef.current = setTimeout(() => {
-            setPipelineFilter(null);
-        }, 5000);
-    };
-
-    const handleRingClick = (event) => {
-        const clickedSegment = detectSegment(event);
-        setPipelineFilter({ status: clickedSegment });
-        schedulePipelineReset(true);
-    };
+    const trackIconBg = TRACK_ICON_BG[track] || 'bg-terracotta-600';
 
     return (
         <div className="space-y-8">
+            {/* Banner */}
             <div className="rounded-3xl bg-gradient-to-br from-terracotta-900 via-terracotta-700 to-coral-600 p-6 sm:p-8 text-white shadow-lg">
-                <h1 className="text-2xl sm:text-3xl font-bold">{track} Track Dashboard</h1>
+                <h1 className="text-2xl sm:text-3xl font-bold">{getTrackShortLabel(track)} Track Dashboard</h1>
                 <p className="text-white/85 mt-1">
                     Hello {user?.name?.split(' ')[0] || 'there'}, here is your track-specific contribution pulse.
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-6 gap-4 mt-6">
-                    <Link to={`/pocs?track=${encodeURIComponent(track)}&status=all`} className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors">
-                        <p className="text-xs uppercase tracking-wide text-white/75">Total Contributions{/*  */}</p>
-                        <p className="text-3xl font-bold mt-1">{stats.total}</p>
-                    </Link>
-                    <Link to={`/pocs?track=${encodeURIComponent(track)}&status=published`} className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors">
-                        <p className="text-xs uppercase tracking-wide text-white/75">Published Contributions</p>
-                        <p className="text-3xl font-bold mt-1">{stats.published}</p>
-                    </Link>
-                    <Link to={`/pocs?track=${encodeURIComponent(track)}&status=live`} className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors">
-                        <p className="text-xs uppercase tracking-wide text-white/75">Live Contributions</p>
-                        <p className="text-3xl font-bold mt-1">{stats.live}</p>
-                    </Link>
-                    <Link to={`/pocs?track=${encodeURIComponent(track)}&status=draft`} className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors">
-                        <p className="text-xs uppercase tracking-wide text-white/75">Draft Contributions</p>
-                        <p className="text-3xl font-bold mt-1">{stats.drafts}</p>
-                    </Link>
-                    <Link to={`/pocs?track=${encodeURIComponent(track)}&status=finished`} className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors">
-                        <p className="text-xs uppercase tracking-wide text-white/75">Finished Contributions</p>
-                        <p className="text-3xl font-bold mt-1">{stats.finished}</p>
-                    </Link>
-                    <Link to={`/pocs?track=${encodeURIComponent(track)}&status=cancelled`} className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors">
-                        <p className="text-xs uppercase tracking-wide text-white/75">Cancelled Contributions</p>
-                        <p className="text-3xl font-bold mt-1">{stats.cancelled}</p>
-                    </Link>
+                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-4 mt-6">
+                    {[
+                        { label: 'Total', count: stats.total, status: 'all' },
+                        { label: 'Published', count: stats.published, status: 'published' },
+                        { label: 'Live', count: stats.live, status: 'live' },
+                        { label: 'Draft', count: stats.drafts, status: 'draft' },
+                        { label: 'Finished', count: stats.finished, status: 'finished' },
+                        { label: 'Cancelled', count: stats.cancelled, status: 'cancelled' },
+                    ].map(({ label, count, status }) => (
+                        <Link
+                            key={status}
+                            to={`/pocs?track=${encodeURIComponent(track)}&status=${status}`}
+                            className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[88px] flex flex-col"
+                        >
+                            <p className="text-xs uppercase tracking-wide text-white/75">{label}</p>
+                            <p className="text-3xl font-bold mt-auto">{count}</p>
+                        </Link>
+                    ))}
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                <Card hover={false} className="p-5 lg:col-span-1">
-                    <h2 className="text-sm font-semibold text-charcoal-700 uppercase tracking-wide">Go-Live Ratio</h2>
-                    <div className="mt-5 relative flex items-center justify-center">
-                        <div
-                            className="w-36 h-36 rounded-full p-3 cursor-pointer"
-                            style={ringStyle}
-                            onClick={handleRingClick}
-                            title="Click segment to filter pipeline"
-                        >
-                            <div className="w-full h-full rounded-full bg-white flex flex-col items-center justify-center">
-                                <p className="text-3xl font-bold text-charcoal-800">{Math.round(animatedLivePct)}%</p>
-                                <p className="text-xs text-charcoal-500">Live</p>
-                            </div>
-                        </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+                {/* Recent Submissions */}
+                <Card hover={false} className="p-6">
+                    <div className="mb-1">
+                        <h2 className="text-base font-semibold text-charcoal-800">Recent Submissions</h2>
+                        <p className="text-sm text-charcoal-500">Latest published contributions in this track.</p>
                     </div>
-                    <p className="text-sm text-charcoal-500 mt-4 text-center">
-                        {stats.live} live out of {stats.total} contribution briefs.
-                    </p>
-                    <div className="mt-3 flex items-center justify-center gap-4 text-xs">
-                        <span className="inline-flex items-center gap-2 text-charcoal-600">
-                            <span className="w-2.5 h-2.5 rounded-full bg-violet-600" />
-                            Published
-                        </span>
-                        <span className="inline-flex items-center gap-2 text-charcoal-600">
-                            <span className="w-2.5 h-2.5 rounded-full bg-terracotta-500" />
-                            Live
-                        </span>
-                        <span className="inline-flex items-center gap-2 text-charcoal-600">
-                            <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
-                            Draft
-                        </span>
-                        <span className="inline-flex items-center gap-2 text-charcoal-600">
-                            <span className="w-2.5 h-2.5 rounded-full bg-green-600" />
-                            Finished
-                        </span>
+                    <div className="mt-4">
+                        {recentSubmissions.length === 0 ? (
+                            <p className="text-sm text-charcoal-400 py-6 text-center">No published contributions yet.</p>
+                        ) : (
+                            <>
+                                <div className="grid grid-cols-[1fr_144px_76px] gap-x-3 items-end">
+                                    <span className="text-xs font-semibold text-charcoal-500 uppercase tracking-wide pb-2 border-b border-sand-200">Title</span>
+                                    <span className="text-xs font-semibold text-charcoal-500 uppercase tracking-wide pb-2 border-b border-sand-200">Track</span>
+                                    <span className="text-xs font-semibold text-charcoal-500 uppercase tracking-wide pb-2 border-b border-sand-200 text-right">Interested</span>
+                                    {recentSubmissions.map((poc) => (
+                                        <Fragment key={poc._id}>
+                                            <Link to={`/pocs/${poc._id}`} className="flex items-center gap-2 min-w-0 py-2.5 border-b border-sand-100 hover:bg-sand-50 rounded-l-lg -ml-2 pl-2 transition-colors">
+                                                <div className={`h-8 w-8 rounded-lg ${trackIconBg} flex items-center justify-center shrink-0`}>
+                                                    {getTrackIconSrc(track) ? (
+                                                        <img src={getTrackIconSrc(track)} alt="" className="h-4 w-4 object-contain brightness-0 invert" />
+                                                    ) : (
+                                                        <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                                                    )}
+                                                </div>
+                                                <span className="text-sm font-medium text-charcoal-800 truncate">{poc.title}</span>
+                                            </Link>
+                                            <Link to={`/pocs/${poc._id}`} className="flex items-center py-2.5 border-b border-sand-100 hover:bg-sand-50 transition-colors">
+                                                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${getTrackBadgeClass(poc.track)}`}>
+                                                    {getTrackShortLabel(poc.track)}
+                                                </span>
+                                            </Link>
+                                            <Link to={`/pocs/${poc._id}`} className="flex items-center justify-end gap-1 py-2.5 border-b border-sand-100 hover:bg-sand-50 rounded-r-lg -mr-2 pr-2 transition-colors">
+                                                <svg className="h-3.5 w-3.5 text-charcoal-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
+                                                </svg>
+                                                <span className="text-sm font-semibold text-charcoal-700">{poc.votesCount || 0}</span>
+                                            </Link>
+                                        </Fragment>
+                                    ))}
+                                </div>
+                                {stats.published > recentSubmissions.length && (
+                                    <div className="mt-3 text-center">
+                                        <Link
+                                            to={`/pocs?track=${encodeURIComponent(track)}&status=published`}
+                                            className="text-xs font-medium text-terracotta-600 hover:text-terracotta-700 hover:underline"
+                                        >
+                                            View all {stats.published} published contributions →
+                                        </Link>
+                                    </div>
+                                )}
+                            </>
+                        )}
                     </div>
                 </Card>
 
-                <Card
-                    hover={false}
-                    className="p-5 lg:col-span-2"
-                    onMouseMove={schedulePipelineReset}
-                    onMouseEnter={schedulePipelineReset}
-                >
-                    <h2 className="text-sm font-semibold text-charcoal-700 uppercase tracking-wide">
-                        {pipelineFilter ? activePipelineTitle : 'Contribution Pipeline'}
-                    </h2>
+                {/* Live Contributions */}
+                <Card hover={false} className="p-6">
+                    <div className="mb-1">
+                        <h2 className="text-base font-semibold text-charcoal-800">Live Contributions</h2>
+                        <p className="text-sm text-charcoal-500">Contributions currently active in this track.</p>
+                    </div>
+                    <div className="mt-4">
+                        {liveContributions.length === 0 ? (
+                            <p className="text-sm text-charcoal-400 py-6 text-center">No live contributions at the moment.</p>
+                        ) : (
+                            <>
+                                <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 items-end">
+                                    <span className="text-xs font-semibold text-charcoal-500 uppercase tracking-wide pb-2 border-b border-sand-200">Title</span>
+                                    <span className="text-xs font-semibold text-charcoal-500 uppercase tracking-wide pb-2 border-b border-sand-200">Point of Contact</span>
+                                    <span className="text-xs font-semibold text-charcoal-500 uppercase tracking-wide pb-2 border-b border-sand-200 text-right">Working</span>
+                                    {liveContributions.map((poc) => (
+                                        <Fragment key={poc._id}>
+                                            <Link to={`/pocs/${poc._id}`} className="flex items-center gap-2 min-w-0 py-2.5 border-b border-sand-100 hover:bg-sand-50 rounded-l-lg -ml-2 pl-2 transition-colors">
+                                                <div className="h-2 w-2 rounded-full bg-emerald-500 shrink-0 animate-pulse" />
+                                                <span className="text-sm font-medium text-charcoal-800 truncate">{poc.title}</span>
+                                            </Link>
+                                            <Link to={`/pocs/${poc._id}`} className="flex items-center py-2.5 border-b border-sand-100 hover:bg-sand-50 transition-colors px-2">
+                                                <span className="text-xs text-charcoal-600 truncate max-w-[120px]">
+                                                    {poc.pointOfContact || <span className="text-charcoal-400 italic">—</span>}
+                                                </span>
+                                            </Link>
+                                            <Link to={`/pocs/${poc._id}`} className="flex items-center justify-end gap-1 py-2.5 border-b border-sand-100 hover:bg-sand-50 rounded-r-lg -mr-2 pr-2 transition-colors">
+                                                <svg className="h-3.5 w-3.5 text-charcoal-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
+                                                </svg>
+                                                <span className="text-sm font-semibold text-charcoal-700">
+                                                    {(poc.approvedUsers || []).length}
+                                                </span>
+                                            </Link>
+                                        </Fragment>
+                                    ))}
+                                </div>
+                                {stats.live > liveContributions.length && (
+                                    <div className="mt-3 text-center">
+                                        <Link
+                                            to={`/pocs?track=${encodeURIComponent(track)}&status=live`}
+                                            className="text-xs font-medium text-terracotta-600 hover:text-terracotta-700 hover:underline"
+                                        >
+                                            View all {stats.live} live contributions →
+                                        </Link>
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
+                </Card>
 
-                    {!pipelineFilter ? (
-                        <div className="mt-5 space-y-4">
-                            <div>
-                                <div className="flex items-center justify-between text-sm mb-1">
-                                    <span className="text-charcoal-600">Published Contributions</span>
-                                    <span className="font-semibold text-charcoal-800">{stats.published}</span>
-                                </div>
-                                <div className="h-3 rounded-full bg-sand-100 overflow-hidden">
-                                    <div
-                                        className="h-full rounded-full bg-violet-600"
-                                        style={{ width: `${animatedPublishedPct}%` }}
-                                    />
-                                </div>
-                            </div>
-                            <div>
-                                <div className="flex items-center justify-between text-sm mb-1">
-                                    <span className="text-charcoal-600">Live Contributions</span>
-                                    <span className="font-semibold text-charcoal-800">{stats.live}</span>
-                                </div>
-                                <div className="h-3 rounded-full bg-sand-100 overflow-hidden">
-                                    <div
-                                        className="h-full rounded-full bg-gradient-to-r from-terracotta-500 to-terracotta-700"
-                                        style={{ width: `${animatedLivePct}%` }}
-                                    />
-                                </div>
-                            </div>
-                            <div>
-                                <div className="flex items-center justify-between text-sm mb-1">
-                                    <span className="text-charcoal-600">Draft Contributions</span>
-                                    <span className="font-semibold text-charcoal-800">{stats.drafts}</span>
-                                </div>
-                                <div className="h-3 rounded-full bg-sand-100 overflow-hidden">
-                                    <div
-                                        className="h-full rounded-full bg-gradient-to-r from-amber-400 to-amber-600"
-                                        style={{ width: `${animatedDraftPct}%` }}
-                                    />
-                                </div>
-                            </div>
-                            <div>
-                                <div className="flex items-center justify-between text-sm mb-1">
-                                    <span className="text-charcoal-600">Finished Contributions</span>
-                                    <span className="font-semibold text-charcoal-800">{stats.finished}</span>
-                                </div>
-                                <div className="h-3 rounded-full bg-sand-100 overflow-hidden">
-                                    <div
-                                        className="h-full rounded-full bg-green-600"
-                                        style={{ width: `${animatedFinishedPct}%` }}
-                                    />
-                                </div>
-                            </div>
-                            <div>
-                                <div className="flex items-center justify-between text-sm mb-1">
-                                    <span className="text-charcoal-600">Cancelled Contributions</span>
-                                    <span className="font-semibold text-charcoal-800">{stats.cancelled}</span>
-                                </div>
-                                <div className="h-3 rounded-full bg-sand-100 overflow-hidden">
-                                    <div
-                                        className="h-full rounded-full bg-red-600"
-                                        style={{ width: `${animatedCancelledPct}%` }}
-                                    />
-                                </div>
-                            </div>
-                        </div>
-                    ) : activePipelineItems.length === 0 ? (
-                        <div className="mt-5">
-                            <p className="text-sm text-charcoal-500">No items found.</p>
-                        </div>
+            {/* Pending Approvals */}
+            <Card hover={false} className="p-6">
+                <div className="mb-1">
+                    <h2 className="text-base font-semibold text-charcoal-800">Pending Approvals</h2>
+                    <p className="text-sm text-charcoal-500">Draft contributions in this track awaiting review.</p>
+                </div>
+                <div className="mt-4">
+                    {pendingApprovals.length === 0 ? (
+                        <p className="text-sm text-charcoal-400 py-6 text-center">No contributions pending approval.</p>
                     ) : (
-                        <div className="mt-5 max-h-72 overflow-auto space-y-2.5 pr-1">
-                            {activePipelineItems.map((item) => (
-                                <Link
-                                    key={item._id}
-                                    to={`/pocs/${item._id}`}
-                                    className="block rounded-xl border border-sand-200 bg-white px-3 py-2.5 hover:bg-sand-50 hover:border-sand-300 transition-colors"
-                                >
-                                    <div className="flex items-start gap-3">
-                                        {item.thumbnail ? (
-                                            <img
-                                                src={item.thumbnail}
-                                                alt={item.title}
-                                                className="w-12 h-12 rounded-lg object-cover flex-shrink-0"
-                                            />
-                                        ) : (
-                                            <div className={`w-12 h-12 rounded-lg bg-gradient-to-br ${getThumbnailGradient(item._id || item.title)} flex items-center justify-center flex-shrink-0`}>
-                                                {getTrackIconSrc(item.track) ? (
-                                                    <img
-                                                        src={getTrackIconSrc(item.track)}
-                                                        alt={`${item.track || 'Contribution'} icon`}
-                                                        className="w-6 h-6 object-contain brightness-0 invert"
-                                                    />
+                        <>
+                            <div className="grid grid-cols-[1fr_144px] gap-x-3 items-end">
+                                <span className="text-xs font-semibold text-charcoal-500 uppercase tracking-wide pb-2 border-b border-sand-200">Title</span>
+                                <span className="text-xs font-semibold text-charcoal-500 uppercase tracking-wide pb-2 border-b border-sand-200">Track</span>
+                                {pendingApprovals.map((poc) => (
+                                    <Fragment key={poc._id}>
+                                        <Link to={`/pocs/${poc._id}`} className="flex items-center gap-2 min-w-0 py-2.5 border-b border-sand-100 hover:bg-sand-50 rounded-l-lg -ml-2 pl-2 transition-colors">
+                                            <div className={`h-8 w-8 rounded-lg ${trackIconBg} flex items-center justify-center shrink-0`}>
+                                                {getTrackIconSrc(track) ? (
+                                                    <img src={getTrackIconSrc(track)} alt="" className="h-4 w-4 object-contain brightness-0 invert" />
                                                 ) : (
-                                                    <svg className="w-5 h-5 text-white/85" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
-                                                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-                                                    </svg>
+                                                    <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                                                 )}
                                             </div>
-                                        )}
-                                        <div className="min-w-0 flex-1">
-                                            <div className="flex items-center justify-between gap-2">
-                                                <p className="text-sm font-semibold text-charcoal-800 truncate">{getTitleWithTrack(item)}</p>
-                                                <Badge color={item.status === 'published' || item.status === 'live' || item.status === 'finished' ? 'green' : 'amber'}>
-                                                    {item.status}
-                                                </Badge>
-                                            </div>
-                                            <p className="text-xs text-charcoal-500 mt-0.5 line-clamp-1">
-                                                {item.description || 'No description provided'}
-                                            </p>
-                                            <div className="mt-1.5 text-[11px] text-charcoal-500">
-                                                {(item.votesCount || 0)} interested
-                                            </div>
-                                        </div>
-                                    </div>
-                                </Link>
-                            ))}
-                        </div>
+                                            <span className="text-sm font-medium text-charcoal-800 truncate">{poc.title}</span>
+                                        </Link>
+                                        <Link to={`/pocs/${poc._id}`} className="flex items-center py-2.5 border-b border-sand-100 hover:bg-sand-50 rounded-r-lg -mr-2 pr-2 transition-colors">
+                                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${getTrackBadgeClass(poc.track)}`}>
+                                                {getTrackShortLabel(poc.track)}
+                                            </span>
+                                        </Link>
+                                    </Fragment>
+                                ))}
+                            </div>
+                            {stats.drafts > pendingApprovals.length && (
+                                <div className="mt-3 text-center">
+                                    <Link
+                                        to={`/pocs?track=${encodeURIComponent(track)}&status=draft`}
+                                        className="text-xs font-medium text-terracotta-600 hover:text-terracotta-700 hover:underline"
+                                    >
+                                        View all {stats.drafts} draft contributions →
+                                    </Link>
+                                </div>
+                            )}
+                        </>
                     )}
-                </Card>
-            </div>
-
-            <div>
-                <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-semibold text-charcoal-800">Recent {track} Contribution Briefs</h2>
-                    <Link to={`/pocs?track=${encodeURIComponent(track)}`}>
-                        <Button variant="ghost" size="sm">View all</Button>
-                    </Link>
                 </div>
+            </Card>
 
-                {recentPocs.length === 0 ? (
-                    <Card hover={false} className="p-8 text-center">
-                        <p className="text-charcoal-500">No contribution briefs yet for this track.</p>
-                    </Card>
+            {/* Top 5 Users by Credits */}
+            <Card hover={false} className="p-6">
+                <div className="flex items-center gap-2 mb-5">
+                    <svg className="h-5 w-5 text-amber-500" viewBox="0 0 24 24" fill="currentColor">
+                        <path fillRule="evenodd" d="M5.166 2.621v.858c-1.035.148-2.059.33-3.071.543a.75.75 0 00-.584.859 6.753 6.753 0 006.138 5.6 6.73 6.73 0 002.743 1.346A6.707 6.707 0 019.279 15H8.54c-1.036 0-1.875.84-1.875 1.875V19.5h-.75a2.25 2.25 0 000 4.5h9a2.25 2.25 0 000-4.5h-.75v-2.625c0-1.036-.84-1.875-1.875-1.875h-.739a6.706 6.706 0 01-1.112-3.173 6.73 6.73 0 002.743-1.347 6.753 6.753 0 006.139-5.6.75.75 0 00-.585-.858 47.077 47.077 0 00-3.07-.543V2.62a.75.75 0 00-.658-.744 49.798 49.798 0 00-6.093-.377.75.75 0 00-.657.744zm0 2.629c0 1.196.312 2.32.857 3.294A5.266 5.266 0 013.16 5.337a45.6 45.6 0 012.006-.343v.256zm13.5 0v-.256c.674.1 1.343.214 2.006.343a5.265 5.265 0 01-2.863 3.207 6.72 6.72 0 00.857-3.294z" clipRule="evenodd" />
+                    </svg>
+                    <h2 className="text-lg font-semibold text-charcoal-800">
+                        Top 5 Users by Credits — {getTrackShortLabel(track)}
+                    </h2>
+                </div>
+                {topContributors.length === 0 ? (
+                    <p className="text-sm text-charcoal-400">No credit data available yet for this track.</p>
                 ) : (
-                    <div className="grid grid-cols-1 gap-4">
-                        {recentPocs.map((poc) => (
-                            <Link key={poc._id} to={`/pocs/${poc._id}`} className="block">
-                                <Card className="p-4 flex items-center gap-4">
-                                    {poc.thumbnail ? (
-                                        <img
-                                            src={poc.thumbnail}
-                                            alt={poc.title}
-                                            className="w-16 h-16 rounded-xl object-cover flex-shrink-0"
-                                        />
-                                    ) : (
-                                        <div className={`w-16 h-16 rounded-xl bg-gradient-to-br ${getThumbnailGradient(poc._id || poc.title)} flex items-center justify-center flex-shrink-0`}>
-                                            {getTrackIconSrc(poc.track) ? (
-                                                <img
-                                                    src={getTrackIconSrc(poc.track)}
-                                                    alt={`${poc.track || 'Contribution'} icon`}
-                                                    className="w-8 h-8 object-contain brightness-0 invert"
-                                                />
-                                            ) : (
-                                                <svg className="w-6 h-6 text-white/85" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-                                                </svg>
-                                            )}
-                                        </div>
-                                    )}
-                                    <div className="flex-1 min-w-0">
-                                        <h3 className="font-semibold text-charcoal-800 truncate">{getTitleWithTrack(poc)}</h3>
-                                        <p className="text-sm text-charcoal-500 truncate">{poc.description}</p>
-                                        <div className="flex items-center gap-2 mt-1.5">
-                                            <Badge color={poc.status === 'published' || poc.status === 'live' || poc.status === 'finished' ? 'green' : 'amber'}>
-                                                {poc.status}
-                                            </Badge>
-                                            {poc.techStack?.slice(0, 3).map((t) => (
-                                                <Badge key={t} color="sand">{t}</Badge>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </Card>
-                            </Link>
+                    <div className="space-y-2.5">
+                        {topContributors.map((row, idx) => (
+                            <div
+                                key={row.user?._id || idx}
+                                className="flex items-center gap-3 px-4 py-3 rounded-xl border border-sand-200 bg-sand-50/50"
+                            >
+                                <span className="w-6 shrink-0 text-sm font-bold text-charcoal-800">{idx + 1}</span>
+                                <div className="h-7 w-7 rounded-full bg-gradient-to-br from-terracotta-400 to-terracotta-600 flex items-center justify-center shrink-0">
+                                    <span className="text-xs font-bold text-white">{(row.user?.name || 'U').charAt(0).toUpperCase()}</span>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-semibold text-charcoal-800 truncate">{row.user?.name || 'Unknown'}</p>
+                                    <p className="text-xs text-charcoal-400 truncate">{row.user?.email || ''}</p>
+                                </div>
+                                <p className="text-sm font-bold text-charcoal-700 shrink-0">{Number(row.totalScore || 0).toFixed(2)}</p>
+                            </div>
                         ))}
                     </div>
                 )}
+            </Card>
             </div>
         </div>
     );

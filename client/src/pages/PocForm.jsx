@@ -16,6 +16,7 @@ const TRACK_OPTIONS = [
     'Organizational Building & Thought Leadership',
 ];
 const IMPACT_OPTIONS = ['High', 'Medium', 'Low'];
+const COMPLEXITY_OPTIONS = ['High', 'Medium', 'Low'];
 const ESTIMATED_DURATION_UNITS = ['days', 'weeks', 'months', 'years'];
 
 const getApiErrorMessage = (err, fallback) => {
@@ -134,6 +135,7 @@ export default function PocForm() {
         challenges: '',
         requestorName: '',
         impact: 'Medium',
+        complexity: 'Medium',
         estimatedDurationValue: '',
         estimatedDurationUnit: 'weeks',
         liveAt: '',
@@ -175,6 +177,7 @@ export default function PocForm() {
                 challenges: poc.challenges || '',
                 requestorName: poc.requestorName || '',
                 impact: poc.impact || 'Medium',
+                complexity: poc.complexity || 'Medium',
                 estimatedDurationValue: poc.estimatedDurationValue ? String(poc.estimatedDurationValue) : '',
                 estimatedDurationUnit: poc.estimatedDurationUnit || 'weeks',
                 liveAt: poc.liveAt ? String(poc.liveAt).slice(0, 16) : '',
@@ -295,6 +298,7 @@ export default function PocForm() {
             challenges: '',
             requestorName: user?.name || '',
             impact: 'Medium',
+            complexity: 'Medium',
             estimatedDurationValue: '',
             estimatedDurationUnit: 'weeks',
             liveAt: '',
@@ -327,6 +331,7 @@ export default function PocForm() {
                 description: form.challenges.trim(),
                 requestorName: isAdmin ? undefined : (form.requestorName || user?.name || ''),
                 impact: form.impact,
+                complexity: form.complexity,
                 estimatedDurationValue: form.estimatedDurationValue,
                 estimatedDurationUnit: form.estimatedDurationUnit,
                 liveAt: undefined,
@@ -572,6 +577,19 @@ export default function PocForm() {
                                     </div>
 
                                     <div className="space-y-1.5">
+                                        <label className="block text-sm font-medium text-charcoal-700">Complexity</label>
+                                        <select
+                                            value={form.complexity}
+                                            onChange={(e) => setForm({ ...form, complexity: e.target.value })}
+                                            className="w-full rounded-xl border border-sand-300 bg-white px-4 py-2.5 text-sm text-charcoal-800 focus:border-terracotta-400 focus:ring-2 focus:ring-terracotta-100 focus:outline-none transition-all duration-200"
+                                        >
+                                            {COMPLEXITY_OPTIONS.map((option) => (
+                                                <option key={option} value={option}>{option}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div className="space-y-1.5">
                                         <label className="block text-sm font-medium text-charcoal-700">Estimated Completion Time</label>
                                         <div className="flex gap-3">
                                             <Input
@@ -668,7 +686,7 @@ export default function PocForm() {
                             </Button>
                         ) : (
                             <Button type="button" loading={loading} onClick={handleSubmit}>
-                                {isEdit ? 'Update POC' : 'Submit POC'}
+                                {isEdit ? 'Update POC' : 'Submit Contribution'}
                             </Button>
                         )}
 

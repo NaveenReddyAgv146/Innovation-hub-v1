@@ -36,7 +36,7 @@ export default function Layout({ children }) {
     if (user?.role === 'viewer') {
         navItems.push({ path: '/pocs?interested=true', label: 'Interested', icon: StarIcon });
         navItems.push({ path: '/pocs?involved=true', label: 'Involved Contributions', icon: ScopeIcon });
-        navItems.push({ path: '/pocs?pocContact=true', label: 'POC Contributions', icon: UsersIcon });
+        navItems.push({ path: '/pocs?pocContact=true', label: 'Project Ownership', icon: UsersIcon });
         navItems.push({ path: '/my-credits', label: 'My Credits', icon: TrophyIcon });
     }
 
@@ -45,13 +45,13 @@ export default function Layout({ children }) {
     }
 
     if (user?.role === 'admin') {
-        navItems.push({ path: '/admin/idea-reviews', label: 'Contribution Reviews', icon: ReviewIcon });
-        navItems.push({ path: '/admin/user-interests', label: 'User Interests', icon: StarIcon });
+        navItems.push({ path: '/admin/idea-reviews', label: 'Contribution Queue', icon: ReviewIcon });
+        navItems.push({ path: '/admin/user-interests', label: 'Engagement Overview', icon: StarIcon });
         navItems.push({ path: '/admin/leaderboard', label: 'Leaderboard', icon: TrophyIcon });
     }
 
     if (isSuperAdmin(user)) {
-        navItems.push({ path: '/users', label: 'Users', icon: UsersIcon });
+        navItems.push({ path: '/users', label: 'User Management', icon: UsersIcon });
     }
 
     if (hasTrackDashboardAccess(user)) {
@@ -186,7 +186,7 @@ export default function Layout({ children }) {
 
             {/* Main content */}
             <main className="lg:ml-64 min-h-screen pt-14 lg:pt-0">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
+                <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
                     {children}
                 </div>
             </main>
