@@ -74,10 +74,7 @@ def enforce_admin_track_access(current_user: dict[str, Any], track: str) -> None
         return
     admin_track = get_admin_track(current_user)
     if not admin_track:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin track assignment is required for this action",
-        )
+        return  # Global admin (role=admin, no track) — unrestricted access
     if track != admin_track:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -416,23 +413,39 @@ def build_current_user_participation(poc: dict[str, Any], user_id: str) -> dict[
     }
 
 
-def send_live_notification_webhook(payload: dict[str, Any]) -> None:
-    webhook_url = settings.power_automate_live_webhook_url.strip()
-    if not webhook_url:
+def _fire_webhook(webhook_url: str, payload: dict[str, Any]) -> None:
+    """Generic synchronous webhook POST — intended to run in a background thread."""
+    url = webhook_url.strip()
+    if not url:
         return
     data = json.dumps(payload).encode("utf-8")
-    req = url_request.Request(
-        webhook_url,
-        data=data,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
+    req = url_request.Request(url, data=data, headers={"Content-Type": "application/json"}, method="POST")
     try:
         with url_request.urlopen(req, timeout=10) as response:
             if response.status >= 400:
-                logger.warning("Power Automate webhook returned status %s", response.status)
+                logger.warning("Power Automate [%s] returned status %s", payload.get("eventType"), response.status)
     except url_error.URLError as exc:
-        logger.warning("Failed to trigger Power Automate webhook: %s", exc)
+        logger.warning("Power Automate [%s] failed: %s", payload.get("eventType"), exc)
+
+
+def _build_poc_snippet(poc: dict[str, Any], extra: dict[str, Any] | None = None) -> dict[str, Any]:
+    snippet: dict[str, Any] = {
+        "id": str(poc.get("_id")),
+        "title": str(poc.get("title") or ""),
+        "track": str(poc.get("track") or ""),
+        "status": str(poc.get("status") or ""),
+        "link": f"{settings.client_url.rstrip('/')}/pocs/{poc.get('_id')}",
+    }
+    if extra:
+        snippet.update(extra)
+    return snippet
+
+
+def _build_recipient(user: dict[str, Any]) -> dict[str, Any] | None:
+    email = str(user.get("email") or "").strip()
+    if not email:
+        return None
+    return {"id": str(user["_id"]), "name": str(user.get("name") or "").strip(), "email": email}
 
 
 async def queue_live_notifications(
@@ -441,6 +454,7 @@ async def queue_live_notifications(
     actor: dict[str, Any],
     background_tasks: BackgroundTasks,
 ) -> dict[str, Any]:
+    """Notify approved contributors when a contribution goes live."""
     webhook_url = settings.power_automate_live_webhook_url.strip()
     if not webhook_url:
         return {"webhookEnabled": False, "notificationsQueued": False, "recipientCount": 0}
@@ -453,30 +467,13 @@ async def queue_live_notifications(
     if not approved_ids:
         return {"webhookEnabled": True, "notificationsQueued": False, "recipientCount": 0}
     users = await db.users.find({"_id": {"$in": approved_ids}}, {"name": 1, "email": 1}).to_list(length=len(approved_ids))
-    recipients = []
-    for user in users:
-        email = str(user.get("email") or "").strip()
-        if email:
-            recipients.append(
-                {
-                    "id": str(user["_id"]),
-                    "name": str(user.get("name") or "").strip(),
-                    "email": email,
-                }
-            )
+    recipients = [r for u in users if (r := _build_recipient(u))]
     if not recipients:
         return {"webhookEnabled": True, "notificationsQueued": False, "recipientCount": 0}
     payload = {
         "eventType": "poc_live",
         "triggeredAt": datetime.now(timezone.utc).isoformat(),
-        "poc": {
-            "id": str(poc.get("_id")),
-            "title": str(poc.get("title") or ""),
-            "track": str(poc.get("track") or ""),
-            "status": str(poc.get("status") or ""),
-            "liveAt": poc.get("liveAt").isoformat() if isinstance(poc.get("liveAt"), datetime) else None,
-            "link": f"{settings.client_url.rstrip('/')}/pocs/{poc.get('_id')}",
-        },
+        "poc": _build_poc_snippet(poc, {"liveAt": poc.get("liveAt").isoformat() if isinstance(poc.get("liveAt"), datetime) else None}),
         "triggeredBy": {
             "id": str(actor.get("id") or actor.get("_id") or ""),
             "name": str(actor.get("name") or ""),
@@ -484,8 +481,128 @@ async def queue_live_notifications(
         },
         "recipients": recipients,
     }
-    background_tasks.add_task(send_live_notification_webhook, payload)
+    background_tasks.add_task(_fire_webhook, webhook_url, payload)
     return {"webhookEnabled": True, "notificationsQueued": True, "recipientCount": len(recipients)}
+
+
+async def queue_published_notifications(
+    db: AsyncIOMotorDatabase,
+    poc: dict[str, Any],
+    actor: dict[str, Any],
+    background_tasks: BackgroundTasks,
+) -> None:
+    """Notify ALL users (except the publisher) that a new contribution is open for interest."""
+    webhook_url = settings.power_automate_published_webhook_url.strip()
+    logger.info("queue_published_notifications: url_set=%s poc=%s", bool(webhook_url), poc.get("_id"))
+    if not webhook_url:
+        logger.warning("POWER_AUTOMATE_PUBLISHED_WEBHOOK_URL is not set — skipping published notification")
+        return
+    publisher_id = str(actor.get("id") or actor.get("_id") or "")
+    all_users = await db.users.find({}, {"name": 1, "email": 1}).to_list(length=2000)
+    recipients = []
+    for u in all_users:
+        if str(u["_id"]) == publisher_id:
+            continue
+        r = _build_recipient(u)
+        if r:
+            recipients.append(r)
+    logger.info("queue_published_notifications: %d recipients found", len(recipients))
+    if not recipients:
+        return
+    payload = {
+        "eventType": "poc_published",
+        "triggeredAt": datetime.now(timezone.utc).isoformat(),
+        "poc": _build_poc_snippet(poc),
+        "triggeredBy": {
+            "id": publisher_id,
+            "name": str(actor.get("name") or ""),
+            "email": str(actor.get("email") or ""),
+        },
+        "recipients": recipients,
+    }
+    background_tasks.add_task(_fire_webhook, webhook_url, payload)
+    logger.info("queue_published_notifications: webhook queued for %d recipients", len(recipients))
+
+
+async def queue_user_approved_notification(
+    db: AsyncIOMotorDatabase,
+    poc: dict[str, Any],
+    approved_user_id: str,
+    actor: dict[str, Any],
+    background_tasks: BackgroundTasks,
+) -> None:
+    """Notify a specific user that they have been approved as a contributor."""
+    webhook_url = settings.power_automate_user_approved_webhook_url.strip()
+    logger.info("queue_user_approved_notification: url_set=%s user=%s poc=%s", bool(webhook_url), approved_user_id, poc.get("_id"))
+    if not webhook_url:
+        logger.warning("POWER_AUTOMATE_USER_APPROVED_WEBHOOK_URL is not set — skipping approval notification")
+        return
+    if not ObjectId.is_valid(approved_user_id):
+        logger.warning("queue_user_approved_notification: invalid user id %s", approved_user_id)
+        return
+    user = await db.users.find_one({"_id": ObjectId(approved_user_id)}, {"name": 1, "email": 1})
+    if not user:
+        return
+    recipient = _build_recipient(user)
+    if not recipient:
+        logger.warning("queue_user_approved_notification: user %s has no email", approved_user_id)
+        return
+    payload = {
+        "eventType": "user_approved",
+        "triggeredAt": datetime.now(timezone.utc).isoformat(),
+        "poc": _build_poc_snippet(poc),
+        "triggeredBy": {
+            "id": str(actor.get("id") or actor.get("_id") or ""),
+            "name": str(actor.get("name") or ""),
+            "email": str(actor.get("email") or ""),
+        },
+        "recipients": [recipient],
+    }
+    background_tasks.add_task(_fire_webhook, webhook_url, payload)
+    logger.info("queue_user_approved_notification: webhook queued for %s", recipient.get("email"))
+
+
+async def queue_finished_notifications(
+    db: AsyncIOMotorDatabase,
+    poc: dict[str, Any],
+    actor: dict[str, Any],
+    background_tasks: BackgroundTasks,
+) -> None:
+    """Notify all approved contributors that the contribution has finished and credits were awarded."""
+    webhook_url = settings.power_automate_finished_webhook_url.strip()
+    logger.info("queue_finished_notifications: url_set=%s poc=%s", bool(webhook_url), poc.get("_id"))
+    if not webhook_url:
+        logger.warning("POWER_AUTOMATE_FINISHED_WEBHOOK_URL is not set — skipping finished notification")
+        return
+    ids_set: set[ObjectId] = set()
+    for field in ("approvedUsers", "creditsAwardedUserIds"):
+        for value in poc.get(field) or []:
+            if isinstance(value, ObjectId):
+                ids_set.add(value)
+            elif isinstance(value, str) and ObjectId.is_valid(value):
+                ids_set.add(ObjectId(value))
+    if not ids_set:
+        logger.info("queue_finished_notifications: no approved users found — skipping")
+        return
+    users = await db.users.find({"_id": {"$in": list(ids_set)}}, {"name": 1, "email": 1}).to_list(length=len(ids_set))
+    recipients = [r for u in users if (r := _build_recipient(u))]
+    logger.info("queue_finished_notifications: %d recipients found", len(recipients))
+    if not recipients:
+        return
+    impact = str(poc.get("impact") or "")
+    payload = {
+        "eventType": "poc_finished",
+        "triggeredAt": datetime.now(timezone.utc).isoformat(),
+        "poc": _build_poc_snippet(poc, {"impact": impact, "creditsAwarded": IMPACT_CREDIT_MAP.get(impact, 0)}),
+        "triggeredBy": {
+            "id": str(actor.get("id") or actor.get("_id") or ""),
+            "name": str(actor.get("name") or ""),
+            "email": str(actor.get("email") or ""),
+        },
+        "recipients": recipients,
+    }
+    background_tasks.add_task(_fire_webhook, webhook_url, payload)
+    logger.info("queue_finished_notifications: webhook queued for %d recipients", len(recipients))
 
 
 @router.get("")
@@ -762,6 +879,7 @@ async def create_poc(
 @router.put("/{poc_id}")
 async def update_poc(
     poc_id: str,
+    background_tasks: BackgroundTasks,
     title: str | None = Form(default=None),
     description: str | None = Form(default=None),
     customer: str | None = Form(default=None),
@@ -785,6 +903,7 @@ async def update_poc(
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     poc = await fetch_poc_or_404(db, poc_id)
+    previous_status = str(poc.get("status") or "")
     enforce_owner_or_admin(poc, current_user)
     enforce_admin_track_access(current_user, str(poc.get("track") or ""))
     if poc.get("status") == "cancelled":
@@ -899,6 +1018,9 @@ async def update_poc(
             serialized["author"] = serialize_doc(user)
     enrich_vote_info(serialized, current_user["id"])
 
+    if status_value == "published" and previous_status != "published":
+        await queue_published_notifications(db, updated, current_user, background_tasks)
+
     return {"message": "POC updated", "poc": serialized}
 
 
@@ -919,6 +1041,7 @@ async def delete_poc(
 @router.post("/{poc_id}/publish")
 async def publish_poc(
     poc_id: str,
+    background_tasks: BackgroundTasks,
     current_user=Depends(require_roles("admin")),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
@@ -940,6 +1063,8 @@ async def publish_poc(
         if user:
             serialized["author"] = serialize_doc(user)
     enrich_vote_info(serialized, current_user["id"])
+
+    await queue_published_notifications(db, updated, current_user, background_tasks)
 
     return {"message": "POC published", "poc": serialized}
 
@@ -979,6 +1104,7 @@ async def go_live_poc(
 @router.post("/{poc_id}/finish")
 async def finish_poc(
     poc_id: str,
+    background_tasks: BackgroundTasks,
     current_user=Depends(require_roles("admin")),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
@@ -1012,6 +1138,8 @@ async def finish_poc(
         if user:
             serialized["author"] = serialize_doc(user)
     enrich_vote_info(serialized, current_user["id"])
+
+    await queue_finished_notifications(db, updated, current_user, background_tasks)
 
     if awarded_count > 0:
         return {
@@ -1295,6 +1423,7 @@ async def get_poc_voters(
 @router.post("/{poc_id}/approve-user")
 async def approve_poc_user(
     poc_id: str,
+    background_tasks: BackgroundTasks,
     userId: str = Form(...),
     current_user=Depends(require_roles("admin")),
     db: AsyncIOMotorDatabase = Depends(get_db),
@@ -1331,6 +1460,7 @@ async def approve_poc_user(
             }
         },
     )
+    await queue_user_approved_notification(db, poc, userId, current_user, background_tasks)
     return {"message": "User approved"}
 
 
@@ -1368,6 +1498,7 @@ async def unapprove_poc_user(
 @router.post("/{poc_id}/add-contributor")
 async def add_contributor_directly(
     poc_id: str,
+    background_tasks: BackgroundTasks,
     userId: str = Form(...),
     current_user=Depends(require_roles("admin")),
     db: AsyncIOMotorDatabase = Depends(get_db),
@@ -1408,6 +1539,7 @@ async def add_contributor_directly(
         {"_id": ObjectId(poc_id)},
         {"$push": {"approvedDetails": {"userId": target_user_id, "approvedAt": now}}},
     )
+    await queue_user_approved_notification(db, poc, userId, current_user, background_tasks)
     return {"message": "Contributor added"}
 
 

@@ -19,4 +19,8 @@ export const getAssignedAdminTrack = (user) => {
     return LEGACY_TRACK_ADMIN_EMAILS[email] || '';
 };
 
+// Global admin = super admin email OR role=admin with no track assignment
+export const isGlobalAdmin = (user) =>
+    isSuperAdmin(user) || (user?.role === 'admin' && !getAssignedAdminTrack(user));
+
 export const hasTrackDashboardAccess = (user) => Boolean(getAssignedAdminTrack(user));

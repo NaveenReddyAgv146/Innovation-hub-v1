@@ -1,0 +1,106 @@
+================================================================================
+                        VIBE HUB — EMAIL NOTIFICATIONS OVERVIEW
+================================================================================
+
+
+────────────────────────────────────────────────────────────────────────────────
+1. LIVE EMAIL
+   Trigger  : Admin clicks "Go Live" on a published contribution
+   Sent to  : All approved contributors of that contribution
+────────────────────────────────────────────────────────────────────────────────
+
+  Subject  : 🚀 [Contribution Title] is now LIVE – You're in!
+
+  Body     :
+    - Greeting       : Hi [Recipient Name],
+    - Message        : A contribution you've been approved for has just gone LIVE.
+                       Time to dive in and make an impact!
+    - Contribution   : [Contribution Title]
+    - Track          : [Track Name]
+    - Sent by        : [Admin Name] via Agivant VIBE Hub
+
+
+────────────────────────────────────────────────────────────────────────────────
+2. PUBLISHED EMAIL
+   Trigger  : Admin publishes a contribution (via Publish button or Edit + Publish)
+   Sent to  : All users in the system EXCEPT the person who published it
+────────────────────────────────────────────────────────────────────────────────
+
+  Subject  : 🎯 New VIBE Published: [Contribution Title]
+
+  Body     :
+    - Greeting       : Hello Agivantians,
+    - Message        : A new VIBE has just been published! Explore it, show your
+                       interest, and be part of something exciting.
+    - Contribution   : [Contribution Title]
+    - Track          : [Track Name]
+    - CTA Button     : View on VIBE Hub →
+    - Sent by        : [Admin Name] via Agivant VIBE Hub
+
+
+────────────────────────────────────────────────────────────────────────────────
+3. APPROVED EMAIL
+   Trigger  : Admin approves a user's interest OR directly adds a contributor
+   Sent to  : The specific user who was approved (single recipient)
+────────────────────────────────────────────────────────────────────────────────
+
+  Subject  : 🎉 You're Approved for [Contribution Title]
+
+  Body     :
+    - Greeting       : Hi [Recipient Name],
+    - Message        : Congratulations! Your interest has been reviewed and you
+                       are now officially approved to work on this contribution.
+    - Contribution   : [Contribution Title]
+    - Track          : [Track Name]
+    - Status Badge   : ✅ Status: Approved
+    - Sent by        : [Admin Name] via Agivant VIBE Hub
+
+
+────────────────────────────────────────────────────────────────────────────────
+4. FINISHED EMAIL
+   Trigger  : Admin marks a live contribution as Finished
+   Sent to  : All approved contributors + anyone who received credits
+────────────────────────────────────────────────────────────────────────────────
+
+  Subject  : ✅ VIBE Completed: [Contribution Title]
+
+  Body     :
+    - Greeting       : Hi [Recipient Name],
+    - Message        : The VIBE contribution you were part of has been marked as
+                       completed. Thank you for your dedication and collaboration.
+    - Contribution   : [Contribution Title]
+    - Track          : [Track Name]
+    - Status Badge   : 🏆 Status: Completed
+    - Sent by        : [Admin Name] via Agivant VIBE Hub
+
+
+================================================================================
+                              DATA SENT IN EACH EMAIL
+================================================================================
+
+  Field             LIVE    PUBLISHED   APPROVED   FINISHED
+  ─────────────────────────────────────────────────────────
+  Contribution Title  ✓        ✓           ✓          ✓
+  Track               ✓        ✓           ✓          ✓
+  Contribution Link   ✓        ✓           ✓          ✓
+  Recipient Name      ✓        ✗           ✓          ✓
+  Admin (Sent By)     ✓        ✓           ✓          ✓
+  Live Date/Time      ✓        ✗           ✗          ✗
+  Impact Level        ✗        ✗           ✗          ✓
+  Credits Awarded     ✗        ✗           ✗          ✓
+
+  Note: PUBLISHED email sends to agivant-all@agivant.com directly (no loop),
+        so Recipient Name is not personalised — uses "Hello Agivantians" instead.
+
+
+================================================================================
+                                 RECIPIENTS SUMMARY
+================================================================================
+
+  LIVE       → Approved contributors only
+  PUBLISHED  → All users except the publisher
+  APPROVED   → Only the 1 user who was just approved
+  FINISHED   → All approved contributors (including anyone who earned credits)
+
+
+================================================================================

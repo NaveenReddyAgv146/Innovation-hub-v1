@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { authService } from '../services/endpoints';
 import Input from '../components/ui/Input';
 import Button from '../components/ui/Button';
-import { COMPANY_LOGO_URL, COMPANY_NAME } from '../config/branding';
+import { COMPANY_LOGO_FULL_URL, COMPANY_NAME } from '../config/branding';
 
 const getApiErrorMessage = (err, fallback) => {
     const data = err?.response?.data;
@@ -57,7 +57,7 @@ export default function Register() {
         <div className="min-h-screen bg-warm-white flex items-center justify-center px-4">
             <div className="w-full max-w-md">
                 <div className="text-center mb-8">
-                    <img src={COMPANY_LOGO_URL} alt={`${COMPANY_NAME} logo`} className="mx-auto w-14 h-14 rounded-2xl object-cover shadow-lg mb-4 bg-white" />
+                    <img src={COMPANY_LOGO_FULL_URL} alt={COMPANY_NAME} className="mx-auto h-14 w-auto object-contain mb-5" />
                     <h1 className="text-2xl font-bold text-charcoal-800">Create Account</h1>
                     <p className="text-charcoal-500 mt-1">Join the {COMPANY_NAME} platform</p>
                 </div>

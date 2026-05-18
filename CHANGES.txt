@@ -1,0 +1,236 @@
+================================================================================
+                  VIBE Hub — Changes Log (Since GitHub Pull)
+================================================================================
+
+
+────────────────────────────────────────────────────────────────────────────────
+ 2026-02-27  Initial Setup
+────────────────────────────────────────────────────────────────────────────────
+  - Initial commit: POC Showcase client (React) and server (Node/Express)
+  - Added comprehensive project README
+
+
+────────────────────────────────────────────────────────────────────────────────
+ 2026-03-05  Backend Migration to FastAPI
+────────────────────────────────────────────────────────────────────────────────
+  - Migrated entire backend from Node.js / Express to Python / FastAPI
+  - Removed old server/ folder (controllers, models, routes, middleware)
+  - Created backend-fastapi/ with:
+      app/api/routes/auth.py        — login, register, refresh token
+      app/api/routes/pocs.py        — full CRUD for contributions
+      app/api/routes/users.py       — user management
+      app/api/deps.py               — auth dependencies
+      app/core/config.py            — pydantic-settings config
+      app/core/database.py          — MongoDB Motor async client
+      app/core/security.py          — JWT helpers
+      app/schemas/                  — pydantic request/response schemas
+      scripts/seed_admin.py         — seed admin user script
+      requirements.txt              — Python dependencies
+  - Added Vercel deployment config (vercel.json + api/index.py)
+
+
+────────────────────────────────────────────────────────────────────────────────
+ 2026-03-06  Auth, Branding & Viewer Visibility
+────────────────────────────────────────────────────────────────────────────────
+  - Split user name into firstName + lastName on register
+  - Added viewer draft visibility rules (viewers can only see own drafts)
+  - Agivant rebrand applied across UI
+  - Added branding config file (client/src/config/branding.js)
+  - Login, Register, Layout, PocForm, PocList, UserManagement updated
+
+
+────────────────────────────────────────────────────────────────────────────────
+ 2026-03-09  UX Enhancements
+────────────────────────────────────────────────────────────────────────────────
+  - Clickable dashboard filter cards (status, track, interest)
+  - Viewer upload restriction (viewers cannot upload thumbnails)
+  - Dynamic thumbnail gradient fallback when no image uploaded
+  - Added src/utils/thumbnailGradient.js
+
+
+────────────────────────────────────────────────────────────────────────────────
+ 2026-03-10  Dashboard & Innovation Hub Branding
+────────────────────────────────────────────────────────────────────────────────
+  - Dashboard interactions and animations refined
+  - Innovation Hub branding applied (index.html, branding.js)
+  - Dark mode readability improvements (index.css)
+  - Added src/utils/pocIcon.js for contribution icons
+
+
+────────────────────────────────────────────────────────────────────────────────
+ 2026-03-13  Vercel Deployment & TLS Fixes
+────────────────────────────────────────────────────────────────────────────────
+  - Added client/vercel.json — SPA rewrite so React Router works on Vercel
+  - Fixed Atlas TLS handshake on Vercel using certifi CA (database.py)
+  - Added certifi to requirements.txt
+  - Updated backend config.py and .env.example
+  - Added multi-step stepper UX to PocForm
+  - Added user delete confirmation dialog to UserManagement
+  - Added test.ipynb for backend API testing
+
+
+────────────────────────────────────────────────────────────────────────────────
+ 2026-03-16  Role-Based Dashboards & Interest Analytics  (PR #1 merged)
+────────────────────────────────────────────────────────────────────────────────
+  - Role-specific dashboards: viewer / admin / track admin views
+  - New page: TrackDashboard.jsx — track admin analytics
+  - New page: UserInterests.jsx — viewer interest tracking
+  - Track asset images added (delivery, leadership, learning, solutions, increase)
+  - Idea Reviews page updates (admin approval workflow)
+  - PocList expanded with filters and pagination
+  - PocDetail updated with contributor and voter details
+  - PocForm extended with new fields
+  - Register page improvements
+  - UserManagement role assignments
+  - Added src/utils/subadminTrack.js (later replaced by access.js)
+  - Backend: interest analytics endpoint, user schema updates
+
+
+────────────────────────────────────────────────────────────────────────────────
+ 2026-03-18  Role-Based Admin Flow & Availability Capture
+────────────────────────────────────────────────────────────────────────────────
+  - Track admin assignment — admin restricted to specific track
+  - enforce_admin_track_access() added to backend (blocks cross-track actions)
+  - Availability value + unit captured when user shows interest
+  - New page: seed_demo_data.py — seed script for demo contributions
+  - Added src/utils/access.js with isSuperAdmin, getAssignedAdminTrack
+  - Added src/utils/trackIcons.js — track icon mapping
+  - Removed subadminTrack.js (replaced by access.js)
+  - Terminology change: "POC" → "Contribution" / "VIBE" across UI
+  - PocList, PocDetail, PocForm, Layout, Dashboard all updated
+
+
+────────────────────────────────────────────────────────────────────────────────
+ 2026-03-24  Feedback, Credits, Leaderboard & Hour Logging
+────────────────────────────────────────────────────────────────────────────────
+  - New page: Leaderboard.jsx — contributor credit rankings
+  - New page: MyCredits.jsx — individual credit history
+  - Impact-based credit system: High=10, Medium=7, Low=5
+  - Credit auto-awarded when contribution marked as finished
+  - Admin performance feedback on contributors (Exceeds / Meets / Does Not Meet)
+  - User self-feedback on finished contributions
+  - Hour logging per contributor (start/end time slots, IST timezone)
+  - Hours summary and approval by owner/admin
+  - Power Automate webhook for contribution going LIVE (first webhook)
+  - Approved contributors notified by email when contribution goes live
+  - PocDetail massively expanded (contributor panel, feedback, hours)
+  - Dashboard updated with leaderboard and credit sections
+  - Backend: leaderboard endpoint, weighted credit formula, feedback endpoints
+
+
+────────────────────────────────────────────────────────────────────────────────
+ 2026-03-25  Dashboard Fixes & Env Updates
+────────────────────────────────────────────────────────────────────────────────
+  - Fix: viewer dashboard pipeline counts now use involved contributions
+  - Fix: dashboard/feedback/filter edge cases
+  - Added client/.env.example and updated backend .env.example
+  - PocDetail viewer permissions improved
+  - README updated
+
+
+────────────────────────────────────────────────────────────────────────────────
+ 2026-03-26  Leaderboard & Credit Formula Refinements
+────────────────────────────────────────────────────────────────────────────────
+  - Updated weighted credit formula in leaderboard
+  - Leaderboard breakdown columns updated
+  - Fix: viewer track overview counts include visible live + finished contributions
+  - Simplified leaderboard columns (removed impact credit header line)
+  - Seed demo data script updated
+
+
+────────────────────────────────────────────────────────────────────────────────
+ 2026-05-13  Track Dashboard Rewrite, POC Contact & Bar Chart
+────────────────────────────────────────────────────────────────────────────────
+  - Track Dashboard fully rewritten with new layout and charts
+  - Bar chart added for contribution pipeline visualization
+  - Point-of-contact (pocContact) field added to contributions
+      - POC contact can view voter/interest list for their contribution
+  - Database indexing improvements (database.py)
+  - User schema: new fields added
+  - PocDetail: POC contact access rules, additional info panels
+  - PocList: filter improvements
+  - PocForm: POC contact input field
+  - UserManagement: additional user fields
+  - Dashboard: track overview and filter improvements
+  - Leaderboard and MyCredits minor tweaks
+  - endpoints.js updated for new API calls
+  - README updated with new features
+
+
+────────────────────────────────────────────────────────────────────────────────
+ 2026-05-15  Global Admin, Webhooks & Email Notifications  (NOT YET COMMITTED)
+────────────────────────────────────────────────────────────────────────────────
+
+  GLOBAL ADMIN SUPPORT
+  - Added isGlobalAdmin() helper in client/src/utils/access.js
+      Logic: isSuperAdmin OR (role=admin AND no track assigned)
+  - App.jsx: SuperAdminRoute now uses isGlobalAdmin (not just super admin)
+  - Layout.jsx: "User Management" nav item shown to all global admins
+  - UserManagement.jsx: save guard uses isGlobalAdmin
+  - deps.py: added require_global_admin dependency on backend
+  - users.py: all routes switched from require_super_admin to require_global_admin
+  - pocs.py: enforce_admin_track_access() now passes global admins through freely
+
+  POWER AUTOMATE WEBHOOK — PUBLISHED EMAIL
+  - Fires when a contribution is published (via Publish button or edit + publish)
+  - Sends to: all users EXCEPT the publisher
+  - Added POWER_AUTOMATE_PUBLISHED_WEBHOOK_URL to config.py and .env
+  - queue_published_notifications() function added in pocs.py
+  - Wired into POST /publish endpoint
+  - Wired into PUT /pocs/:id endpoint when status transitions to "published"
+
+  POWER AUTOMATE WEBHOOK — USER APPROVED EMAIL
+  - Fires when a user is approved as a contributor
+  - Sends to: the single user who was just approved
+  - Added POWER_AUTOMATE_USER_APPROVED_WEBHOOK_URL to config.py and .env
+  - queue_user_approved_notification() function added in pocs.py
+  - Wired into POST /approve-user endpoint
+  - Wired into POST /add-contributor endpoint (directly-added users also notified)
+
+  POWER AUTOMATE WEBHOOK — FINISHED EMAIL
+  - Fires when a contribution is marked as finished
+  - Sends to: all approved contributors + anyone who received credits
+  - Added POWER_AUTOMATE_FINISHED_WEBHOOK_URL to config.py and .env
+  - queue_finished_notifications() function added in pocs.py
+  - Wired into POST /finish endpoint
+
+  JSON PAYLOAD (same structure for all 4 webhooks)
+  - eventType, triggeredAt, poc { id, title, track, status, link }
+  - triggeredBy { id, name, email }
+  - recipients [ { id, name, email } ... ]
+  - Finished webhook also includes: poc.impact, poc.creditsAwarded
+  - Live webhook also includes: poc.liveAt
+
+  HTML EMAIL TEMPLATES (designed for Power Automate)
+  - All 4 emails given professional HTML templates with colour-coded headers
+  - Live = green, Published = indigo, Approved = amber, Finished = dark slate
+  - Table-based layout with inline CSS for Outlook compatibility
+
+  LOCUST PERFORMANCE TEST FILE
+  - New file: locustfile.py (project root)
+  - Covers: login, browse contributions, filter by track/status/interest,
+    view detail, show interest, admin publish/approve/finish actions
+  - Real accounts loaded: 10 viewer users + 6 admin users (all password 123456)
+  - Classes: ViewerUser, AdminUser
+
+  OTHER FILES
+  - email-templates-overview.txt — email subject/body documentation
+  - client/src/assests/vibe-logo.png — new VIBE logo
+  - client/src/assests/dashboard-vibe-logo.png — dashboard logo
+  - backend-fastapi/.env.example — deleted (actual .env has real values)
+
+
+================================================================================
+  Summary
+================================================================================
+  First commit : 2026-02-27
+  Last commit  : 2026-05-13
+  Uncommitted  : 2026-05-15 (current session)
+
+  Total committed : 29 commits
+  Uncommitted changes : 15 modified files, 4 new files
+
+  Backend language : Node/Express → FastAPI (Python)  [migrated 2026-03-05]
+  Database         : MongoDB (Motor async driver)
+  Frontend         : React 19 + Vite (unchanged from initial)
+================================================================================

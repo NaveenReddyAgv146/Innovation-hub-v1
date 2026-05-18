@@ -10,7 +10,7 @@ import ErrorState from '../components/ui/ErrorState';
 import EmptyState from '../components/ui/EmptyState';
 import Pagination from '../components/ui/Pagination';
 import useAuthStore from '../store/authStore';
-import { SUPER_ADMIN_EMAIL, isSuperAdmin } from '../utils/access';
+import { SUPER_ADMIN_EMAIL, isGlobalAdmin } from '../utils/access';
 
 const ADMIN_TRACK_OPTIONS = [
     'Solutions',
@@ -124,8 +124,8 @@ export default function UserManagement() {
     const handleSave = async (e) => {
         e.preventDefault();
         setFormError('');
-        if (!isSuperAdmin(currentUser)) {
-            setFormError('Only the super admin can manage users');
+        if (!isGlobalAdmin(currentUser)) {
+            setFormError('Only admins can manage users');
             return;
         }
         if (formData.role === 'viewer' && !formData.employeeId.trim()) {

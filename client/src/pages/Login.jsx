@@ -4,7 +4,7 @@ import useAuthStore from '../store/authStore';
 import { authService } from '../services/endpoints';
 import Input from '../components/ui/Input';
 import Button from '../components/ui/Button';
-import { COMPANY_LOGO_URL, COMPANY_NAME } from '../config/branding';
+import { COMPANY_LOGO_FULL_URL, COMPANY_NAME } from '../config/branding';
 
 export default function Login() {
     const [form, setForm] = useState({ email: '', password: '' });
@@ -36,9 +36,9 @@ export default function Login() {
             <div className="w-full max-w-md">
                 {/* Brand */}
                 <div className="text-center mb-8">
-                    <img src={COMPANY_LOGO_URL} alt={`${COMPANY_NAME} logo`} className="mx-auto w-14 h-14 rounded-2xl object-cover shadow-lg mb-4 bg-white" />
+                    <img src={COMPANY_LOGO_FULL_URL} alt={COMPANY_NAME} className="mx-auto h-14 w-auto object-contain mb-5" />
                     <h1 className="text-2xl font-bold text-charcoal-800">Welcome back</h1>
-                    <p className="text-charcoal-500 mt-1">Sign in to {COMPANY_NAME}</p>
+                    <p className="text-charcoal-500 mt-1">Sign in to your account</p>
                 </div>
 
                 {/* Card */}

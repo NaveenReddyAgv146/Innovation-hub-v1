@@ -7,6 +7,7 @@ import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import Spinner from '../components/ui/Spinner';
 import { getAssignedAdminTrack } from '../utils/access';
+import { COMPANY_LOGO_FULL_URL, COMPANY_NAME } from '../config/branding';
 
 const TRACK_OPTIONS = [
     'Solutions',
@@ -379,6 +380,7 @@ export default function PocForm() {
     return (
         <div className="mx-auto max-w-5xl">
             <div className="mb-6 rounded-[28px] border border-sand-200 bg-linear-to-br from-white via-sand-50 to-terracotta-50 p-6 sm:p-8">
+                <img src={COMPANY_LOGO_FULL_URL} alt={COMPANY_NAME} className="h-9 w-auto object-contain mb-4" />
                 <p className="text-sm font-medium uppercase tracking-[0.2em] text-charcoal-500">Contribution Workspace</p>
                 <h1 className="mt-2 text-3xl font-bold text-charcoal-800">{isEdit ? 'Edit Idea' : 'Submit New Idea'}</h1>
                 <p className="mt-1 text-charcoal-500">Transform your concept into a tangible Proof of Concept.</p>

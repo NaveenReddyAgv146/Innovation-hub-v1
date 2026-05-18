@@ -6,7 +6,7 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from app.api.deps import get_admin_track, get_current_user, require_roles, require_super_admin
+from app.api.deps import get_admin_track, get_current_user, require_roles, require_super_admin, require_global_admin
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import hash_password
@@ -103,7 +103,7 @@ async def get_users(
     page: int = Query(default=1, ge=1),
     limit: int = Query(default=10, ge=1, le=100),
     search: str = "",
-    _admin=Depends(require_super_admin),
+    _admin=Depends(require_global_admin),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     query: dict = {}
@@ -496,7 +496,7 @@ async def get_my_credits(
 @router.get("/{user_id}")
 async def get_user_by_id(
     user_id: str,
-    _admin=Depends(require_super_admin),
+    _admin=Depends(require_global_admin),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     if not ObjectId.is_valid(user_id):
@@ -512,7 +512,7 @@ async def get_user_by_id(
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_user(
     payload: CreateUserRequest,
-    _admin=Depends(require_super_admin),
+    _admin=Depends(require_global_admin),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     existing = await db.users.find_one({"email": payload.email.lower()})
@@ -548,7 +548,7 @@ async def create_user(
 async def update_user(
     user_id: str,
     payload: UpdateUserRequest,
-    _admin=Depends(require_super_admin),
+    _admin=Depends(require_global_admin),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     if not ObjectId.is_valid(user_id):
@@ -610,7 +610,7 @@ async def update_user(
 @router.delete("/{user_id}")
 async def delete_user(
     user_id: str,
-    _admin=Depends(require_super_admin),
+    _admin=Depends(require_global_admin),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     if not ObjectId.is_valid(user_id):

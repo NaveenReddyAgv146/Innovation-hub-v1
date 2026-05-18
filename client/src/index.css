@@ -46,8 +46,12 @@
   --color-charcoal-800: #0f172a;
   --color-charcoal-700: #1e293b;
   --color-charcoal-600: #334155;
-  --color-charcoal-500: #475569;
-  --color-charcoal-400: #64748b;
+  --color-charcoal-500: #374151;
+  --color-charcoal-400: #4b5563;
+}
+
+html {
+  font-size: 106.25%; /* 17px base — lifts all rem-based sizes ~6% for readability */
 }
 
 :root {
@@ -81,8 +85,8 @@
   --color-charcoal-800: #f8fafc;
   --color-charcoal-700: #e2e8f0;
   --color-charcoal-600: #cbd5e1;
-  --color-charcoal-500: #b8c6da;
-  --color-charcoal-400: #93a9c6;
+  --color-charcoal-500: #c4d0e0;
+  --color-charcoal-400: #a8bbd0;
 }
 
 /* ============================================
@@ -188,4 +192,32 @@ button,
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+/* ============================================
+   Contrast fixes for low-opacity white text
+   (used on gradient/dark banners)
+   ============================================ */
+.text-white\/60 { color: rgb(255 255 255 / 0.87); }
+.text-white\/70 { color: rgb(255 255 255 / 0.90); }
+.text-white\/75 { color: rgb(255 255 255 / 0.92); }
+.text-white\/80 { color: rgb(255 255 255 / 0.94); }
+
+/* ============================================
+   Typography scale — consistent sizing
+   ============================================ */
+/* Ensure body text is never smaller than 14px */
+body {
+  font-size: 1rem;      /* 17px with the html override */
+  line-height: 1.6;
+}
+
+/* Headings — clear hierarchy */
+h1 { font-size: 1.75rem;  line-height: 1.25; }
+h2 { font-size: 1.375rem; line-height: 1.3;  }
+h3 { font-size: 1.125rem; line-height: 1.35; }
+
+/* Inputs and buttons inherit body size so they never feel tiny */
+input, select, textarea, button {
+  font-size: inherit;
 }

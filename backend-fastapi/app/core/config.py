@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     jwt_access_expiry_minutes: int = 15
     jwt_refresh_expiry_days: int = 7
     power_automate_live_webhook_url: str = ""
+    power_automate_published_webhook_url: str = ""
+    power_automate_user_approved_webhook_url: str = ""
+    power_automate_finished_webhook_url: str = ""
 
     model_config = SettingsConfigDict(
         env_file=BASE_DIR / ".env",

@@ -11,6 +11,7 @@ import Input from '../components/ui/Input';
 import { getThumbnailGradient } from '../utils/thumbnailGradient';
 import { getTrackIconSrc } from '../utils/trackIcons';
 import { hasTrackDashboardAccess, getAssignedAdminTrack } from '../utils/access';
+import { COMPANY_LOGO_FULL_URL, COMPANY_NAME,COMPANY_LOGO_Dashboard } from '../config/branding';
 
 const AVAILABILITY_UNITS = ['per day', 'per week'];
 
@@ -249,8 +250,15 @@ export default function Dashboard() {
             <div className="space-y-8">
                 {/* Welcome + Stat Cards Banner */}
                 <div className="rounded-3xl bg-gradient-to-br from-terracotta-900 via-terracotta-700 to-coral-600 p-6 sm:p-8 text-white shadow-lg">
-                    <h1 className="text-2xl sm:text-4xl font-bold">Welcome back, {firstName}! 👋</h1>
-                    <p className="text-white/85 mt-1">Explore new ideas, contribute to innovation and earn recognition.</p>
+                    <div className="flex items-start justify-between gap-4">
+                        <div>
+                            <h1 className="text-2xl sm:text-4xl font-bold">Welcome back, {firstName}! 👋</h1>
+                            <p className="text-white/85 mt-1">Explore new ideas, contribute to innovation and earn recognition.</p>
+                        </div>
+                        <div className="shrink-0 hidden sm:flex items-center bg-white/15 backdrop-blur-sm border border-white/20 rounded-2xl px-4 py-2">
+                            <img src={COMPANY_LOGO_FULL_URL} alt={COMPANY_NAME} className="h-8 w-auto object-contain" />
+                        </div>
+                    </div>
 
                     <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-4 mt-6">
                         {/* My Rank */}
@@ -678,8 +686,15 @@ export default function Dashboard() {
         <div className="space-y-8">
             {/* Gradient Banner */}
             <div className="rounded-3xl bg-gradient-to-br from-terracotta-900 via-terracotta-700 to-coral-600 p-6 sm:p-8 text-white shadow-lg">
-                <h1 className="text-2xl sm:text-3xl font-bold">Admin Dashboard</h1>
-                <p className="text-white/85 mt-1">Monitor, manage and drive innovation across the organization.</p>
+                <div className="flex items-start justify-between gap-4">
+                    <div>
+                        <h1 className="text-2xl sm:text-3xl font-bold">Admin Dashboard</h1>
+                        <p className="text-white/85 mt-1">Monitor, manage and drive innovation across the organization.</p>
+                    </div>
+                    <div className="shrink-0 hidden sm:flex items-center bg-white/15 backdrop-blur-sm border border-white/20 rounded-2xl px-4 py-2">
+                        <img src={COMPANY_LOGO_Dashboard} alt={COMPANY_NAME} className="h-8 w-auto object-contain" />
+                    </div>
+                </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-4 mt-6">
                     <Link to="/pocs?status=all" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[100px] flex flex-col gap-2">
                         <div className="flex items-center gap-2">
@@ -1000,7 +1015,7 @@ export default function Dashboard() {
                                 {/* Y-axis labels */}
                                 <div className="flex flex-col justify-between items-end shrink-0 w-6" style={{ height: '176px' }}>
                                     {[maxTrackInterest, Math.round(maxTrackInterest * 0.75), Math.round(maxTrackInterest * 0.5), Math.round(maxTrackInterest * 0.25), 0].map((val, i) => (
-                                        <span key={i} className="text-[10px] leading-none text-charcoal-400">{val}</span>
+                                        <span key={i} className="text-[12px] leading-none text-charcoal-400">{val}</span>
                                     ))}
                                 </div>
 
@@ -1035,7 +1050,7 @@ export default function Dashboard() {
                                     <div className="flex gap-1 px-2 mt-2">
                                         {trackInterestData.map((track) => (
                                             <div key={track.key} className="flex-1 text-center">
-                                                <span className="text-[10px] font-bold text-charcoal-700 leading-tight">{track.label}</span>
+                                                <span className="text-[14px] font-bold text-charcoal-700 leading-tight">{track.label}</span>
                                             </div>
                                         ))}
                                     </div>

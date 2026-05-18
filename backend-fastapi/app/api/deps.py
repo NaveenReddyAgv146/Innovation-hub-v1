@@ -73,3 +73,12 @@ async def require_super_admin(current_user=Depends(get_current_user)):
     if not is_super_admin_user(current_user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
     return current_user
+
+
+async def require_global_admin(current_user=Depends(get_current_user)):
+    """Allow super admin OR any role=admin user with no track assignment (global admin)."""
+    if is_super_admin_user(current_user):
+        return current_user
+    if current_user.get("role") == "admin" and not get_admin_track(current_user):
+        return current_user
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
