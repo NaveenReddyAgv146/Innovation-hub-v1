@@ -103,7 +103,7 @@ export default function IdeaReviews() {
 
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div>
-                    <h1 className="text-2xl font-bold text-charcoal-800">Contribution Queue</h1>
+                    <h1 className="text-2xl font-bold text-charcoal-800">VIBE Queue</h1>
                     <p className="text-charcoal-500 text-sm mt-0.5">
                         Review submitted ideas and publish approved ones for all users.
                     </p>

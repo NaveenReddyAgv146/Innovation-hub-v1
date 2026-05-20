@@ -372,7 +372,7 @@ async def get_contribution_leaderboard(
 async def get_user_directory(
     search: str = Query(default=""),
     limit: int = Query(default=10, ge=1, le=25),
-    _current_user=Depends(require_roles("admin", "developer")),
+    _current_user=Depends(get_current_user),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     cleaned_search = search.strip()

@@ -8,12 +8,12 @@ import ErrorState from '../components/ui/ErrorState';
 import { getAssignedAdminTrack } from '../utils/access';
 import { getTrackIconSrc } from '../utils/trackIcons';
 
-const TRACK_ICON_BG = {
-    'Solutions': 'bg-indigo-600',
-    'Delivery': 'bg-blue-600',
-    'Learning': 'bg-green-600',
-    'GTM/Sales': 'bg-orange-500',
-    'Organizational Building & Thought Leadership': 'bg-slate-700',
+const TRACK_COLORS = {
+    'Solutions': '#314797',
+    'Delivery': '#0070c0',
+    'GTM/Sales': '#9706a2',
+    'Organizational Building & Thought Leadership': '#6da353',
+    'Learning': '#eb7b1e',
 };
 
 const getTrackBadgeClass = (track) => {
@@ -104,15 +104,13 @@ export default function TrackDashboard() {
         );
     }
 
-    const trackIconBg = TRACK_ICON_BG[track] || 'bg-terracotta-600';
-
     return (
         <div className="space-y-8">
             {/* Banner */}
             <div className="rounded-3xl bg-gradient-to-br from-terracotta-900 via-terracotta-700 to-coral-600 p-6 sm:p-8 text-white shadow-lg">
                 <h1 className="text-2xl sm:text-3xl font-bold">{getTrackShortLabel(track)} Track Dashboard</h1>
                 <p className="text-white/85 mt-1">
-                    Hello {user?.name?.split(' ')[0] || 'there'}, here is your track-specific contribution pulse.
+                    Hello {user?.name?.split(' ')[0] || 'there'}, here is your track-specific VIBE pulse.
                 </p>
                 <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-4 mt-6">
                     {[
@@ -141,11 +139,11 @@ export default function TrackDashboard() {
                 <Card hover={false} className="p-6">
                     <div className="mb-1">
                         <h2 className="text-base font-semibold text-charcoal-800">Recent Submissions</h2>
-                        <p className="text-sm text-charcoal-500">Latest published contributions in this track.</p>
+                        <p className="text-sm text-charcoal-500">Latest published VIBEs in this track.</p>
                     </div>
                     <div className="mt-4">
                         {recentSubmissions.length === 0 ? (
-                            <p className="text-sm text-charcoal-400 py-6 text-center">No published contributions yet.</p>
+                            <p className="text-sm text-charcoal-400 py-6 text-center">No published VIBEs yet.</p>
                         ) : (
                             <>
                                 <div className="grid grid-cols-[1fr_144px_76px] gap-x-3 items-end">
@@ -155,9 +153,9 @@ export default function TrackDashboard() {
                                     {recentSubmissions.map((poc) => (
                                         <Fragment key={poc._id}>
                                             <Link to={`/pocs/${poc._id}`} className="flex items-center gap-2 min-w-0 py-2.5 border-b border-sand-100 hover:bg-sand-50 rounded-l-lg -ml-2 pl-2 transition-colors">
-                                                <div className={`h-8 w-8 rounded-lg ${trackIconBg} flex items-center justify-center shrink-0`}>
+                                                <div className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0 p-[5px]" style={{background: TRACK_COLORS[track] || '#314797'}}>
                                                     {getTrackIconSrc(track) ? (
-                                                        <img src={getTrackIconSrc(track)} alt="" className="h-4 w-4 object-contain brightness-0 invert" />
+                                                        <img src={getTrackIconSrc(track)} alt="" className="w-full h-full object-contain" style={{mixBlendMode:'screen'}} />
                                                     ) : (
                                                         <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                                                     )}
@@ -184,7 +182,7 @@ export default function TrackDashboard() {
                                             to={`/pocs?track=${encodeURIComponent(track)}&status=published`}
                                             className="text-xs font-medium text-terracotta-600 hover:text-terracotta-700 hover:underline"
                                         >
-                                            View all {stats.published} published contributions →
+                                            View all {stats.published} published VIBEs →
                                         </Link>
                                     </div>
                                 )}
@@ -193,15 +191,15 @@ export default function TrackDashboard() {
                     </div>
                 </Card>
 
-                {/* Live Contributions */}
+                {/* Live VIBEs */}
                 <Card hover={false} className="p-6">
                     <div className="mb-1">
-                        <h2 className="text-base font-semibold text-charcoal-800">Live Contributions</h2>
-                        <p className="text-sm text-charcoal-500">Contributions currently active in this track.</p>
+                        <h2 className="text-base font-semibold text-charcoal-800">Live VIBEs</h2>
+                        <p className="text-sm text-charcoal-500">VIBEs currently active in this track.</p>
                     </div>
                     <div className="mt-4">
                         {liveContributions.length === 0 ? (
-                            <p className="text-sm text-charcoal-400 py-6 text-center">No live contributions at the moment.</p>
+                            <p className="text-sm text-charcoal-400 py-6 text-center">No live VIBEs at the moment.</p>
                         ) : (
                             <>
                                 <div className="grid grid-cols-[1fr_auto_auto] gap-x-3 items-end">
@@ -236,7 +234,7 @@ export default function TrackDashboard() {
                                             to={`/pocs?track=${encodeURIComponent(track)}&status=live`}
                                             className="text-xs font-medium text-terracotta-600 hover:text-terracotta-700 hover:underline"
                                         >
-                                            View all {stats.live} live contributions →
+                                            View all {stats.live} live VIBEs →
                                         </Link>
                                     </div>
                                 )}
@@ -249,11 +247,11 @@ export default function TrackDashboard() {
             <Card hover={false} className="p-6">
                 <div className="mb-1">
                     <h2 className="text-base font-semibold text-charcoal-800">Pending Approvals</h2>
-                    <p className="text-sm text-charcoal-500">Draft contributions in this track awaiting review.</p>
+                    <p className="text-sm text-charcoal-500">Draft VIBEs in this track awaiting review.</p>
                 </div>
                 <div className="mt-4">
                     {pendingApprovals.length === 0 ? (
-                        <p className="text-sm text-charcoal-400 py-6 text-center">No contributions pending approval.</p>
+                        <p className="text-sm text-charcoal-400 py-6 text-center">No VIBEs pending approval.</p>
                     ) : (
                         <>
                             <div className="grid grid-cols-[1fr_144px] gap-x-3 items-end">
@@ -262,9 +260,9 @@ export default function TrackDashboard() {
                                 {pendingApprovals.map((poc) => (
                                     <Fragment key={poc._id}>
                                         <Link to={`/pocs/${poc._id}`} className="flex items-center gap-2 min-w-0 py-2.5 border-b border-sand-100 hover:bg-sand-50 rounded-l-lg -ml-2 pl-2 transition-colors">
-                                            <div className={`h-8 w-8 rounded-lg ${trackIconBg} flex items-center justify-center shrink-0`}>
+                                            <div className="h-8 w-8 rounded-lg flex items-center justify-center shrink-0 p-[5px]" style={{background: TRACK_COLORS[track] || '#314797'}}>
                                                 {getTrackIconSrc(track) ? (
-                                                    <img src={getTrackIconSrc(track)} alt="" className="h-4 w-4 object-contain brightness-0 invert" />
+                                                    <img src={getTrackIconSrc(track)} alt="" className="w-full h-full object-contain" style={{mixBlendMode:'screen'}} />
                                                 ) : (
                                                     <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                                                 )}
@@ -285,7 +283,7 @@ export default function TrackDashboard() {
                                         to={`/pocs?track=${encodeURIComponent(track)}&status=draft`}
                                         className="text-xs font-medium text-terracotta-600 hover:text-terracotta-700 hover:underline"
                                     >
-                                        View all {stats.drafts} draft contributions →
+                                        View all {stats.drafts} draft VIBEs →
                                     </Link>
                                 </div>
                             )}
@@ -314,7 +312,7 @@ export default function TrackDashboard() {
                                 className="flex items-center gap-3 px-4 py-3 rounded-xl border border-sand-200 bg-sand-50/50"
                             >
                                 <span className="w-6 shrink-0 text-sm font-bold text-charcoal-800">{idx + 1}</span>
-                                <div className="h-7 w-7 rounded-full bg-gradient-to-br from-terracotta-400 to-terracotta-600 flex items-center justify-center shrink-0">
+                                <div className="h-7 w-7 rounded-full bg-gradient-to-br from-terracotta-400 to-terracotta-600 flex items-center justify-center shrink-0 p-[5px]" style={{background:'#2e6fff'}}>
                                     <span className="text-xs font-bold text-white">{(row.user?.name || 'U').charAt(0).toUpperCase()}</span>
                                 </div>
                                 <div className="flex-1 min-w-0">

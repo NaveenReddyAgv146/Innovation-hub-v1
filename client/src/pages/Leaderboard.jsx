@@ -59,7 +59,7 @@ export default function Leaderboard() {
             <Card hover={false} className="p-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                        <h1 className="text-2xl sm:text-3xl font-bold text-charcoal-800">Contribution Leaderboard</h1>
+                        <h1 className="text-2xl sm:text-3xl font-bold text-charcoal-800">VIBE Leaderboard</h1>
                     </div>
                     <Badge color="sand">Current Scope: {scope === 'all' ? 'All Tracks' : scope}</Badge>
                 </div>
@@ -104,7 +104,7 @@ export default function Leaderboard() {
 
             <Card hover={false} className="p-5">
                 {leaderboard.length === 0 ? (
-                    <p className="text-sm text-charcoal-500">No finished contributions with approved users found for this track filter.</p>
+                    <p className="text-sm text-charcoal-500">No finished VIBEs with approved users found for this track filter.</p>
                 ) : (
                     <div className="overflow-auto">
                         <table className="min-w-full text-sm">

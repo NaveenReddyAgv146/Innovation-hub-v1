@@ -96,6 +96,15 @@ def is_point_of_contact_user(poc: dict[str, Any], current_user: dict[str, Any]) 
     return False
 
 
+def enforce_admin_or_poc_contact(poc: dict[str, Any], current_user: dict[str, Any]) -> None:
+    if current_user.get("role") == "admin":
+        enforce_admin_track_access(current_user, str(poc.get("track") or ""))
+        return
+    if is_point_of_contact_user(poc, current_user):
+        return
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to manage this VIBE")
+
+
 def parse_tech_stack(raw: str | None) -> list[str]:
     if not raw:
         return []
@@ -1425,11 +1434,11 @@ async def approve_poc_user(
     poc_id: str,
     background_tasks: BackgroundTasks,
     userId: str = Form(...),
-    current_user=Depends(require_roles("admin")),
+    current_user=Depends(get_current_user),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     poc = await fetch_poc_or_404(db, poc_id)
-    enforce_admin_track_access(current_user, str(poc.get("track") or ""))
+    enforce_admin_or_poc_contact(poc, current_user)
 
     if not ObjectId.is_valid(userId):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid user id")
@@ -1468,11 +1477,11 @@ async def approve_poc_user(
 async def unapprove_poc_user(
     poc_id: str,
     userId: str = Form(...),
-    current_user=Depends(require_roles("admin")),
+    current_user=Depends(get_current_user),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     poc = await fetch_poc_or_404(db, poc_id)
-    enforce_admin_track_access(current_user, str(poc.get("track") or ""))
+    enforce_admin_or_poc_contact(poc, current_user)
 
     if not ObjectId.is_valid(userId):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid user id")
@@ -1500,11 +1509,11 @@ async def add_contributor_directly(
     poc_id: str,
     background_tasks: BackgroundTasks,
     userId: str = Form(...),
-    current_user=Depends(require_roles("admin")),
+    current_user=Depends(get_current_user),
     db: AsyncIOMotorDatabase = Depends(get_db),
 ):
     poc = await fetch_poc_or_404(db, poc_id)
-    enforce_admin_track_access(current_user, str(poc.get("track") or ""))
+    enforce_admin_or_poc_contact(poc, current_user)
 
     if poc.get("status") not in {"published", "live"}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Contributors can only be added to published or live contributions")

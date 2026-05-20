@@ -15,12 +15,28 @@ import { COMPANY_LOGO_FULL_URL, COMPANY_NAME,COMPANY_LOGO_Dashboard } from '../c
 
 const AVAILABILITY_UNITS = ['per day', 'per week'];
 
+const TRACK_COLORS = {
+    'Solutions': '#314797',
+    'Delivery': '#0070c0',
+    'GTM/Sales': '#9706a2',
+    'Organizational Building & Thought Leadership': '#6da353',
+    'Learning': '#eb7b1e',
+};
+
+const STATUS_BAR_COLORS = {
+    published: '#314797',
+    live: '#0070c0',
+    draft: '#eb7b1e',
+    finished: '#6da353',
+    cancelled: '#db3a35',
+};
+
 const TRACKS = [
-    { key: 'Solutions', label: 'Solutions', icon: getTrackIconSrc('Solutions'), ringColor: '#4f46e5', barClass: 'bg-indigo-600', iconBg: 'bg-indigo-600' },
-    { key: 'Delivery', label: 'Delivery', icon: getTrackIconSrc('Delivery'), ringColor: '#2563eb', barClass: 'bg-blue-600', iconBg: 'bg-blue-600' },
-    { key: 'Learning', label: 'Learning', icon: getTrackIconSrc('Learning'), ringColor: '#16a34a', barClass: 'bg-green-600', iconBg: 'bg-green-600' },
-    { key: 'GTM/Sales', label: 'GTM/Sales', icon: getTrackIconSrc('GTM/Sales'), ringColor: '#ea580c', barClass: 'bg-orange-500', iconBg: 'bg-orange-500' },
-    { key: 'Organizational Building & Thought Leadership', label: 'Thought Leadership', icon: getTrackIconSrc('Organizational Building & Thought Leadership'), ringColor: '#334155', barClass: 'bg-slate-700', iconBg: 'bg-slate-700' },
+    { key: 'Solutions', label: 'Solutions', icon: getTrackIconSrc('Solutions'), ringColor: '#314797', barClass: 'bg-indigo-600', color: '#314797' },
+    { key: 'Delivery', label: 'Delivery', icon: getTrackIconSrc('Delivery'), ringColor: '#0070c0', barClass: 'bg-blue-600', color: '#0070c0' },
+    { key: 'Learning', label: 'Learning', icon: getTrackIconSrc('Learning'), ringColor: '#eb7b1e', barClass: 'bg-green-600', color: '#eb7b1e' },
+    { key: 'GTM/Sales', label: 'GTM/Sales', icon: getTrackIconSrc('GTM/Sales'), ringColor: '#9706a2', barClass: 'bg-orange-500', color: '#9706a2' },
+    { key: 'Organizational Building & Thought Leadership', label: 'Thought Leadership', icon: getTrackIconSrc('Organizational Building & Thought Leadership'), ringColor: '#6da353', barClass: 'bg-slate-700', color: '#6da353' },
 ];
 const buildEmptyTrackStats = () =>
     TRACKS.reduce((acc, track) => {
@@ -249,51 +265,51 @@ export default function Dashboard() {
         return (
             <div className="space-y-8">
                 {/* Welcome + Stat Cards Banner */}
-                <div className="rounded-3xl bg-gradient-to-br from-terracotta-900 via-terracotta-700 to-coral-600 p-6 sm:p-8 text-white shadow-lg">
+                <div className="rounded-3xl p-6 sm:p-8 text-white shadow-lg" style={{background: 'linear-gradient(135deg, #0d1540 0%, #1a3580 50%, #5c1515 100%)'}}>
                     <div className="flex items-start justify-between gap-4">
                         <div>
                             <h1 className="text-2xl sm:text-4xl font-bold">Welcome back, {firstName}! 👋</h1>
                             <p className="text-white/85 mt-1">Explore new ideas, contribute to innovation and earn recognition.</p>
                         </div>
                         <div className="shrink-0 hidden sm:flex items-center bg-white/15 backdrop-blur-sm border border-white/20 rounded-2xl px-4 py-2">
-                            <img src={COMPANY_LOGO_FULL_URL} alt={COMPANY_NAME} className="h-8 w-auto object-contain" />
+                            <img src={COMPANY_LOGO_Dashboard} alt={COMPANY_NAME} className="h-8 w-auto object-contain" />
                         </div>
                     </div>
 
                     <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-4 mt-6">
                         {/* My Rank */}
-                        <button type="button" onClick={() => leaderboardSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="text-left rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[104px] flex flex-col cursor-pointer">
+                        <button type="button" onClick={() => leaderboardSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="text-left rounded-2xl bg-white/10 border border-white/15 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[104px] flex flex-col cursor-pointer">
                             <p className="text-xs uppercase tracking-wide text-white/75 leading-tight">My Rank</p>
                             <p className="text-3xl font-bold mt-auto leading-none">{myRank !== null ? `#${myRank}` : '-'}</p>
                             <p className="text-xs text-white/60 mt-1">Overall leaderboard rank</p>
                         </button>
 
                         {/* My Credits */}
-                        <Link to="/my-credits" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[104px] flex flex-col">
+                        <Link to="/my-credits" className="rounded-2xl bg-white/10 border border-white/15 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[104px] flex flex-col">
                             <p className="text-xs uppercase tracking-wide text-white/75 leading-tight">My Credits</p>
                             <p className="text-3xl font-bold mt-auto leading-none">{myTotalScore.toFixed(2)}</p>
-                            <p className="text-xs text-white/60 mt-1">Contribution score</p>
+                            <p className="text-xs text-white/60 mt-1">VIBE score</p>
                         </Link>
 
-                        {/* Live Contributions */}
-                        <Link to="/pocs?involved=true&status=live" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[104px] flex flex-col">
-                            <p className="text-xs uppercase tracking-wide text-white/75 leading-tight">Live Contributions</p>
+                        {/* Live VIBEs */}
+                        <Link to="/pocs?involved=true&status=live" className="rounded-2xl bg-white/10 border border-white/15 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[104px] flex flex-col">
+                            <p className="text-xs uppercase tracking-wide text-white/75 leading-tight">Live VIBEs</p>
                             <p className="text-3xl font-bold mt-auto leading-none">{liveContribCount}</p>
                             <p className="text-xs text-white/60 mt-1">You are part of</p>
                         </Link>
 
                         {/* Active Involvements */}
-                        <Link to="/pocs?involved=true" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[104px] flex flex-col">
+                        <Link to="/pocs?involved=true" className="rounded-2xl bg-white/10 border border-white/15 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[104px] flex flex-col">
                             <p className="text-xs uppercase tracking-wide text-white/75 leading-tight">Active Involvements</p>
                             <p className="text-3xl font-bold mt-auto leading-none">{activeInvolvementsCount}</p>
                             <p className="text-xs text-white/60 mt-1">Needs your attention</p>
                         </Link>
 
-                        {/* Completed Contributions */}
-                        <Link to="/pocs?involved=true&status=finished" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[104px] flex flex-col">
-                            <p className="text-xs uppercase tracking-wide text-white/75 leading-tight">Completed Contributions</p>
+                        {/* Completed VIBEs */}
+                        <Link to="/pocs?involved=true&status=finished" className="rounded-2xl bg-white/10 border border-white/15 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[104px] flex flex-col">
+                            <p className="text-xs uppercase tracking-wide text-white/75 leading-tight">Completed VIBE</p>
                             <p className="text-3xl font-bold mt-auto leading-none">{completedCount}</p>
-                            <p className="text-xs text-white/60 mt-1">Contributions completed</p>
+                            <p className="text-xs text-white/60 mt-1">VIBE completed</p>
                         </Link>
                     </div>
                 </div>
@@ -333,7 +349,7 @@ export default function Dashboard() {
 
                         {hubItems.length === 0 ? (
                             <p className="text-sm text-charcoal-400 py-6 text-center">
-                                {viewerHubTab === 'involved' ? 'No live contributions yet.' : 'No active contributions assigned to you as point of contact.'}
+                                {viewerHubTab === 'involved' ? 'No live VIBEs yet.' : 'No active VIBEs assigned to you as point of contact.'}
                             </p>
                         ) : (
                             <div className="space-y-2">
@@ -344,11 +360,11 @@ export default function Dashboard() {
                                         <Link
                                             key={poc._id}
                                             to={`/pocs/${poc._id}`}
-                                            className="flex items-center gap-3 px-3 py-3 rounded-xl border border-transparent hover:border-sand-200 hover:bg-sand-50 transition-colors group"
+                                            className="flex items-center gap-3 px-3 py-3 rounded border border-transparent hover:border-sand-200 hover:bg-sand-50 transition-colors group"
                                         >
-                                            <div className="h-10 w-10 rounded-xl bg-sand-100 flex items-center justify-center shrink-0">
+                                            <div className="h-10 w-10 rounded bg-sand-100 flex items-center justify-center shrink-0 p-[5px]" style={{background: TRACK_COLORS[poc.track] || '#314797'}}>
                                                 {getTrackIconSrc(poc.track) ? (
-                                                    <img src={getTrackIconSrc(poc.track)} alt="" className="h-5 w-5 object-contain opacity-60" />
+                                                    <img src={getTrackIconSrc(poc.track)} alt="" className="h-5 w-5 object-contain opacity-60" style={{mixBlendMode:'screen'}} />
                                                 ) : (
                                                     <svg className="h-5 w-5 text-charcoal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
                                                         <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
@@ -379,24 +395,24 @@ export default function Dashboard() {
                         )}
                     </Card>
 
-                    {/* Discover Contributions */}
+                    {/* Discover VIBEs */}
                     <Card hover={false} className="p-6">
                         <div className="flex items-center justify-between mb-1">
-                            <h2 className="text-lg font-semibold text-charcoal-800">Discover Contributions</h2>
+                            <h2 className="text-lg font-semibold text-charcoal-800">Discover VIBEs</h2>
                             <Link to="/pocs?status=published" className="text-sm text-blue-600 hover:text-blue-700 font-medium">View all</Link>
                         </div>
                         <p className="text-sm text-charcoal-500 mb-5">Newly published opportunities. Mark interest to get involved.</p>
 
                         {discoverPocs.length === 0 ? (
-                            <p className="text-sm text-charcoal-400 py-6 text-center">No new contributions to discover right now.</p>
+                            <p className="text-sm text-charcoal-400 py-6 text-center">No new VIBEs to discover right now.</p>
                         ) : (
                             <div className="space-y-3">
                                 {discoverPocs.map((poc) => (
-                                    <div key={poc._id} className="flex items-center gap-4 rounded-xl p-2 -mx-2 hover:bg-sand-50 transition-colors group">
+                                    <div key={poc._id} className="flex items-center gap-4 rounded p-2 -mx-2 hover:bg-sand-50 transition-colors group">
                                         <Link to={`/pocs/${poc._id}`} className="flex items-center gap-4 flex-1 min-w-0">
-                                            <div className={`h-11 w-11 rounded-xl bg-gradient-to-br ${getThumbnailGradient(poc._id || poc.title)} flex items-center justify-center shrink-0`}>
+                                            <div className="h-11 w-11 rounded-lg flex items-center justify-center shrink-0" style={{background: TRACK_COLORS[poc.track] || '#314797'}}>
                                                 {getTrackIconSrc(poc.track) ? (
-                                                    <img src={getTrackIconSrc(poc.track)} alt="" className="h-5 w-5 object-contain brightness-0 invert" />
+                                                    <img src={getTrackIconSrc(poc.track)} alt="" className="h-8 w-8 object-contain" style={{mixBlendMode:'screen'}} />
                                                 ) : (
                                                     <svg className="h-5 w-5 text-white/80" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
                                                         <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
@@ -441,7 +457,7 @@ export default function Dashboard() {
                 <div>
                     <div className="mb-4">
                         <h2 className="text-lg font-semibold text-charcoal-800">Track Overview</h2>
-                        <p className="text-sm text-charcoal-500">Published, live, and finished contribution counts by track.</p>
+                        <p className="text-sm text-charcoal-500">Published, live, and finished VIBE counts by track.</p>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-5">
                         {TRACKS.map((track) => {
@@ -459,17 +475,17 @@ export default function Dashboard() {
                                 >
                                     <div className="flex items-start justify-between gap-3">
                                         <p className="text-base font-semibold text-charcoal-800">{track.label}</p>
-                                        <div className="h-10 w-10 rounded-xl bg-terracotta-600 flex items-center justify-center shrink-0">
-                                            <img src={track.icon} alt="" className="h-5 w-5 object-contain brightness-0 invert" />
+                                        <div className="h-10 w-10 rounded flex items-center justify-center shrink-0 p-[5px]" style={{background: track.color}}>
+                                            <img src={track.icon} alt="" className="w-full h-full object-contain" style={{mixBlendMode:'screen'}} />
                                         </div>
                                     </div>
-                                    <p className="mt-1 text-xs text-charcoal-500">{ts.total} total contributions</p>
+                                    <p className="mt-1 text-xs text-charcoal-500">{ts.total} total VIBEs</p>
                                     <div className="mt-5 space-y-3.5">
                                         {[
-                                            { label: 'Published', status: 'published', count: ts.published, pct: publishedPct, barClass: 'bg-violet-600' },
-                                            { label: 'Live', status: 'live', count: ts.live, pct: livePct, barClass: 'bg-gradient-to-r from-terracotta-500 to-terracotta-700' },
-                                            { label: 'Finished', status: 'finished', count: ts.finished, pct: finishedPct, barClass: 'bg-green-600' },
-                                        ].map(({ label, status, count, pct, barClass }) => (
+                                            { label: 'Published', status: 'published', count: ts.published, pct: publishedPct },
+                                            { label: 'Live', status: 'live', count: ts.live, pct: livePct },
+                                            { label: 'Finished', status: 'finished', count: ts.finished, pct: finishedPct },
+                                        ].map(({ label, status, count, pct }) => (
                                             <div
                                                 key={label}
                                                 className="space-y-1 cursor-pointer group/bar"
@@ -480,7 +496,7 @@ export default function Dashboard() {
                                                     <span className="font-medium text-charcoal-700">{count}</span>
                                                 </div>
                                                 <div className="h-2 rounded-full bg-sand-100 overflow-hidden group-hover/bar:h-2.5 transition-all">
-                                                    <div className={`h-full rounded-full ${barClass}`} style={{ width: `${pct}%` }} />
+                                                    <div className="h-full rounded-full" style={{ width: `${pct}%`, background: STATUS_BAR_COLORS[status] }} />
                                                 </div>
                                             </div>
                                         ))}
@@ -513,12 +529,12 @@ export default function Dashboard() {
                                     return (
                                         <div
                                             key={row.user?._id || idx}
-                                            className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-colors ${isMe ? 'border-blue-200 bg-blue-50' : 'border-sand-200 bg-sand-50/50'}`}
+                                            className={`flex items-center gap-3 px-4 py-3 rounded border transition-colors ${isMe ? 'border-blue-200 bg-blue-50' : 'border-sand-200 bg-sand-50/50'}`}
                                         >
                                             <span className="w-6 shrink-0 text-sm font-bold text-charcoal-800">
                                                 {idx + 1}
                                             </span>
-                                            <div className="h-7 w-7 rounded-full bg-gradient-to-br from-terracotta-400 to-terracotta-600 flex items-center justify-center shrink-0">
+                                            <div className="h-7 w-7 rounded-full bg-gradient-to-br from-terracotta-400 to-terracotta-600 flex items-center justify-center shrink-0 p-[5px]" style={{background:'#2e6fff'}}>
                                                 <span className="text-xs font-bold text-white">{(row.user?.name || 'U').charAt(0).toUpperCase()}</span>
                                             </div>
                                             <div className="flex-1 min-w-0">
@@ -534,9 +550,9 @@ export default function Dashboard() {
                                     );
                                 })}
                                 {!isInTop5 && myRankEntry && (
-                                    <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl border border-blue-200 bg-blue-50">
+                                    <div className="flex items-center gap-3 px-3 py-2.5 rounded border border-blue-200 bg-blue-50">
                                         <span className="w-6 shrink-0 text-sm font-bold text-blue-500">#{myRank}</span>
-                                        <div className="h-7 w-7 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center shrink-0">
+                                        <div className="h-7 w-7 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center shrink-0 p-[5px]" style={{background:'#2e6fff'}}>
                                             <span className="text-xs font-bold text-white">{(user?.name || 'U').charAt(0).toUpperCase()}</span>
                                         </div>
                                         <div className="flex-1 min-w-0">
@@ -547,7 +563,7 @@ export default function Dashboard() {
                                     </div>
                                 )}
                                 {creditsToTop5 !== null && (
-                                    <div className="mt-2 flex items-center gap-2 rounded-xl border border-sand-200 bg-sand-50 px-3 py-2 text-sm text-charcoal-600">
+                                    <div className="mt-2 flex items-center gap-2 rounded border border-sand-200 bg-sand-50 px-3 py-2 text-sm text-charcoal-600">
                                         <span>You're just</span>
                                         <span className="font-semibold text-charcoal-800">{creditsToTop5.toFixed(2)}</span>
                                         <span>credits away from Top 5! 🚀</span>
@@ -558,31 +574,60 @@ export default function Dashboard() {
                     </Card>
 
                     {/* Credits by Track */}
-                    <Card hover={false} className="p-6">
-                        <div className="mb-5">
+                    <Card hover={false} className="p-6 flex flex-col">
+                        <div className="mb-4">
                             <h2 className="text-lg font-semibold text-charcoal-800">Credits by Track (Till Date)</h2>
+                            <p className="text-sm text-charcoal-500">Your earned credits per track.</p>
                         </div>
                         {myTrackCredits.every((t) => t.score === 0) ? (
-                            <p className="text-sm text-charcoal-400">No track credits earned yet.</p>
+                            <div className="flex-1 flex items-center justify-center">
+                                <p className="text-sm text-charcoal-400">No track credits earned yet.</p>
+                            </div>
                         ) : (
-                            <div className="space-y-5">
-                                {myTrackCredits.map((t) => (
-                                    <div key={t.key} className="flex items-center gap-4">
-                                        <div className="h-8 w-8 rounded-lg bg-terracotta-600 flex items-center justify-center shrink-0">
-                                            <img src={t.icon} alt="" className="h-4 w-4 object-contain brightness-0 invert" />
-                                        </div>
-                                        <p className="w-36 shrink-0 text-sm font-medium text-charcoal-700 truncate">{t.label}</p>
-                                        <div className="flex-1 h-3 rounded-full bg-sand-100 overflow-hidden">
-                                            <div
-                                                className={`h-full rounded-full ${t.barClass}`}
-                                                style={{ width: `${(t.score / maxTrackScore) * 100}%` }}
-                                            />
-                                        </div>
-                                        <p className="w-14 shrink-0 text-right text-sm font-bold text-charcoal-800">
-                                            {t.score.toFixed(1)}
-                                        </p>
+                            <div className="flex-1 flex flex-col justify-center">
+                                <div className="flex gap-2">
+                                    {/* Y-axis labels */}
+                                    <div className="flex flex-col justify-between items-end shrink-0 w-8" style={{ height: '176px' }}>
+                                        {[maxTrackScore, maxTrackScore * 0.75, maxTrackScore * 0.5, maxTrackScore * 0.25, 0].map((val, i) => (
+                                            <span key={i} className="text-[11px] leading-none text-charcoal-400">{val === 0 ? '0' : val.toFixed(1)}</span>
+                                        ))}
                                     </div>
-                                ))}
+                                    {/* Chart area */}
+                                    <div className="flex-1 flex flex-col">
+                                        <div className="relative h-44">
+                                            {[100, 75, 50, 25, 0].map((pct) => (
+                                                <div key={pct} className="absolute inset-x-0 border-t border-sand-200" style={{ top: `${100 - pct}%` }} />
+                                            ))}
+                                            <div className="absolute inset-0 flex items-end gap-1 px-2">
+                                                {myTrackCredits.map((t) => {
+                                                    const heightPct = Math.max(2, (t.score / maxTrackScore) * 100);
+                                                    return (
+                                                        <div key={t.key} className="flex-1 h-full flex items-end justify-center">
+                                                            <div
+                                                                className="relative group/bar w-12 rounded-t-md cursor-default transition-opacity duration-150 hover:opacity-75"
+                                                                style={{ height: `${heightPct}%`, background: TRACK_COLORS[t.key] || '#314797' }}
+                                                            >
+                                                                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-charcoal-800 text-white text-xs font-medium rounded-lg px-2.5 py-2 whitespace-nowrap opacity-0 group-hover/bar:opacity-100 transition-opacity pointer-events-none z-30 shadow-xl">
+                                                                    <p className="font-semibold mb-0.5">{t.label}</p>
+                                                                    <p className="text-white/75">{t.score.toFixed(2)} credits</p>
+                                                                    <div className="absolute top-full left-1/2 -translate-x-1/2 -translate-y-px w-2 h-2 bg-charcoal-800 rotate-45" />
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                        {/* X-axis labels */}
+                                        <div className="flex gap-1 px-2 mt-2">
+                                            {myTrackCredits.map((t) => (
+                                                <div key={t.key} className="flex-1 text-center">
+                                                    <span className="text-[11px] font-medium text-charcoal-500 leading-tight">{t.label}</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         )}
                     </Card>
@@ -609,7 +654,7 @@ export default function Dashboard() {
                                     <select
                                         value={availabilityUnit}
                                         onChange={(e) => setAvailabilityUnit(e.target.value)}
-                                        className="w-36 rounded-xl border border-sand-300 bg-white px-4 py-2.5 text-sm text-charcoal-800 focus:border-terracotta-400 focus:ring-2 focus:ring-terracotta-100 focus:outline-none transition-all duration-200"
+                                        className="w-36 rounded border border-sand-300 bg-white px-4 py-2.5 text-sm text-charcoal-800 focus:border-terracotta-400 focus:ring-2 focus:ring-terracotta-100 focus:outline-none transition-all duration-200"
                                     >
                                         {AVAILABILITY_UNITS.map((unit) => (
                                             <option key={unit} value={unit}>{unit}</option>
@@ -671,12 +716,9 @@ export default function Dashboard() {
         return 'bg-sand-100 text-charcoal-600';
     };
 
-    const getTrackBadgeClass = (track) => {
-        if (track === 'Solutions') return 'bg-indigo-50 text-indigo-700 border border-indigo-200';
-        if (track === 'Delivery') return 'bg-blue-50 text-blue-700 border border-blue-200';
-        if (track === 'Learning') return 'bg-green-50 text-green-700 border border-green-200';
-        if (track === 'GTM/Sales') return 'bg-orange-50 text-orange-700 border border-orange-200';
-        return 'bg-slate-50 text-slate-700 border border-slate-200';
+    const getTrackBadgeStyle = (track) => {
+        const color = TRACK_COLORS[track] || '#314797';
+        return { color, background: color + '20', borderColor: color + '50' };
     };
 
     const getTrackShortLabel = (track) =>
@@ -685,70 +727,70 @@ export default function Dashboard() {
     return (
         <div className="space-y-8">
             {/* Gradient Banner */}
-            <div className="rounded-3xl bg-gradient-to-br from-terracotta-900 via-terracotta-700 to-coral-600 p-6 sm:p-8 text-white shadow-lg">
+            <div className="rounded-3xl p-6 sm:p-8 text-white shadow-lg" style={{background: 'linear-gradient(135deg, #0d1540 0%, #1a3580 50%, #5c1515 100%)'}}>
                 <div className="flex items-start justify-between gap-4">
                     <div>
                         <h1 className="text-2xl sm:text-3xl font-bold">Admin Dashboard</h1>
-                        <p className="text-white/85 mt-1">Monitor, manage and drive innovation across the organization.</p>
+                        <p className="text-white/80 mt-1">Monitor, manage and drive innovation across the organization.</p>
                     </div>
                     <div className="shrink-0 hidden sm:flex items-center bg-white/15 backdrop-blur-sm border border-white/20 rounded-2xl px-4 py-2">
                         <img src={COMPANY_LOGO_Dashboard} alt={COMPANY_NAME} className="h-8 w-auto object-contain" />
                     </div>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-4 mt-6">
-                    <Link to="/pocs?status=all" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[100px] flex flex-col gap-2">
-                        <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
-                                <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" /></svg>
-                            </div>
-                            <p className="text-xs font-medium text-white/80">Total Contributions</p>
+                    <Link to="/pocs?status=all" className="rounded-2xl bg-white/10 border border-white/15 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors flex items-center justify-between gap-3">
+                        <div>
+                            <p className="text-3xl font-bold leading-none">{stats.total}</p>
+                            <p className="text-xs font-medium text-white/80 mt-1.5">Total VIBEs</p>
                         </div>
-                        <p className="text-3xl font-bold mt-auto leading-none">{stats.total}</p>
+                        <div className="w-10 h-10 rounded flex items-center justify-center shrink-0" style={{background:'#6366f1'}}>
+                            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M6 6.878V6a2.25 2.25 0 012.25-2.25h7.5A2.25 2.25 0 0118 6v.878m-12 0c.235-.083.487-.128.75-.128h10.5c.263 0 .515.045.75.128m-12 0A2.25 2.25 0 004.5 9v.878m13.5-3A2.25 2.25 0 0119.5 9v.878m0 0a2.246 2.246 0 00-.75-.128H5.25c-.263 0-.515.045-.75.128m15 0A2.25 2.25 0 0121 12v6a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 18v-6c0-.98.626-1.813 1.5-2.122" /></svg>
+                        </div>
                     </Link>
-                    <Link to="/pocs?status=published" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[100px] flex flex-col gap-2">
-                        <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
-                                <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" /></svg>
-                            </div>
-                            <p className="text-xs font-medium text-white/80">Published</p>
+                    <Link to="/pocs?status=published" className="rounded-2xl bg-white/10 border border-white/15 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors flex items-center justify-between gap-3">
+                        <div>
+                            <p className="text-3xl font-bold leading-none">{stats.published}</p>
+                            <p className="text-xs font-medium text-white/80 mt-1.5">Published</p>
                         </div>
-                        <p className="text-3xl font-bold mt-auto leading-none">{stats.published}</p>
+                        <div className="w-10 h-10 rounded flex items-center justify-center shrink-0" style={{background:'#314797'}}>
+                            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.631 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-1.757 4.306 4.493 4.493 0 004.306-1.758M16.5 9a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" /></svg>
+                        </div>
                     </Link>
-                    <Link to="/pocs?status=live" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[100px] flex flex-col gap-2">
-                        <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
-                                <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8.288 15.038a5.25 5.25 0 017.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0M12.53 18.22l-.53.53-.53-.53a.75.75 0 011.06 0z" /></svg>
-                            </div>
-                            <p className="text-xs font-medium text-white/80">Live</p>
+                    <Link to="/pocs?status=live" className="rounded-2xl bg-white/10 border border-white/15 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors flex items-center justify-between gap-3">
+                        <div>
+                            <p className="text-3xl font-bold leading-none">{stats.live}</p>
+                            <p className="text-xs font-medium text-white/80 mt-1.5">Live</p>
                         </div>
-                        <p className="text-3xl font-bold mt-auto leading-none">{stats.live}</p>
+                        <div className="w-10 h-10 rounded flex items-center justify-center shrink-0" style={{background:'#0070c0'}}>
+                            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" /></svg>
+                        </div>
                     </Link>
-                    <Link to="/pocs?status=draft" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[100px] flex flex-col gap-2">
-                        <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
-                                <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>
-                            </div>
-                            <p className="text-xs font-medium text-white/80">Draft</p>
+                    <Link to="/pocs?status=draft" className="rounded-2xl bg-white/10 border border-white/15 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors flex items-center justify-between gap-3">
+                        <div>
+                            <p className="text-3xl font-bold leading-none">{stats.drafts}</p>
+                            <p className="text-xs font-medium text-white/80 mt-1.5">Draft</p>
                         </div>
-                        <p className="text-3xl font-bold mt-auto leading-none">{stats.drafts}</p>
+                        <div className="w-10 h-10 rounded flex items-center justify-center shrink-0" style={{background:'#eb7b1e'}}>
+                            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>
+                        </div>
                     </Link>
-                    <Link to="/pocs?status=finished" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[100px] flex flex-col gap-2">
-                        <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
-                                <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                            </div>
-                            <p className="text-xs font-medium text-white/80">Finished</p>
+                    <Link to="/pocs?status=finished" className="rounded-2xl bg-white/10 border border-white/15 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors flex items-center justify-between gap-3">
+                        <div>
+                            <p className="text-3xl font-bold leading-none">{stats.finished}</p>
+                            <p className="text-xs font-medium text-white/80 mt-1.5">Finished</p>
                         </div>
-                        <p className="text-3xl font-bold mt-auto leading-none">{stats.finished}</p>
+                        <div className="w-10 h-10 rounded flex items-center justify-center shrink-0" style={{background:'#6da353'}}>
+                            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        </div>
                     </Link>
-                    <Link to="/pocs?status=cancelled" className="rounded-2xl bg-white/12 border border-white/20 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors min-h-[100px] flex flex-col gap-2">
-                        <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center shrink-0">
-                                <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                            </div>
-                            <p className="text-xs font-medium text-white/80">Cancelled</p>
+                    <Link to="/pocs?status=cancelled" className="rounded-2xl bg-white/10 border border-white/15 p-4 backdrop-blur-sm hover:bg-white/20 transition-colors flex items-center justify-between gap-3">
+                        <div>
+                            <p className="text-3xl font-bold leading-none">{stats.cancelled}</p>
+                            <p className="text-xs font-medium text-white/80 mt-1.5">Cancelled</p>
                         </div>
-                        <p className="text-3xl font-bold mt-auto leading-none">{stats.cancelled}</p>
+                        <div className="w-10 h-10 rounded flex items-center justify-center shrink-0" style={{background:'#db3a35'}}>
+                            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
+                        </div>
                     </Link>
                 </div>
             </div>
@@ -758,7 +800,7 @@ export default function Dashboard() {
                 <div className="flex items-center justify-between mb-4">
                     <div>
                         <h2 className="text-lg font-semibold text-charcoal-800">Track Overview</h2>
-                        <p className="text-sm text-charcoal-500">Published, live, draft, finished and cancelled contributions by track.</p>
+                        <p className="text-sm text-charcoal-500">Published, live, draft, finished and cancelled VIBEs by track.</p>
                     </div>
                     <Link to="/pocs" className="text-sm text-blue-600 hover:text-blue-700 font-medium">View all tracks</Link>
                 </div>
@@ -782,18 +824,18 @@ export default function Dashboard() {
                                         <p className="text-sm font-semibold text-charcoal-800">{track.label}</p>
                                         <p className="text-xs text-charcoal-400">{ts.total} Total</p>
                                     </div>
-                                    <div className={`h-10 w-10 rounded-xl ${track.iconBg} flex items-center justify-center shrink-0`}>
-                                        <img src={track.icon} alt={track.label} className="h-5 w-5 object-contain brightness-0 invert" />
+                                    <div className="h-10 w-10 rounded flex items-center justify-center shrink-0 p-[5px]" style={{background: track.color}}>
+                                        <img src={track.icon} alt={track.label} className="w-full h-full object-contain" style={{mixBlendMode:'screen'}} />
                                     </div>
                                 </div>
                                 <div className="mt-4 space-y-2.5">
                                     {[
-                                        { label: 'Published', count: ts.published, pct: publishedPct, barClass: 'bg-violet-500', status: 'published' },
-                                        { label: 'Live', count: ts.live, pct: livePct, barClass: 'bg-blue-500', status: 'live' },
-                                        { label: 'Draft', count: ts.draft, pct: draftPct, barClass: 'bg-amber-400', status: 'draft' },
-                                        { label: 'Finished', count: ts.finished, pct: finishedPct, barClass: 'bg-green-500', status: 'finished' },
-                                        { label: 'Cancelled', count: ts.cancelled, pct: cancelledPct, barClass: 'bg-red-500', status: 'cancelled' },
-                                    ].map(({ label, count, pct, barClass, status }) => (
+                                        { label: 'Published', count: ts.published, pct: publishedPct, status: 'published' },
+                                        { label: 'Live', count: ts.live, pct: livePct, status: 'live' },
+                                        { label: 'Draft', count: ts.draft, pct: draftPct, status: 'draft' },
+                                        { label: 'Finished', count: ts.finished, pct: finishedPct, status: 'finished' },
+                                        { label: 'Cancelled', count: ts.cancelled, pct: cancelledPct, status: 'cancelled' },
+                                    ].map(({ label, count, pct, status }) => (
                                         <div
                                             key={label}
                                             className="space-y-1 cursor-pointer"
@@ -804,7 +846,7 @@ export default function Dashboard() {
                                                 <span className="font-medium text-charcoal-700">{count}</span>
                                             </div>
                                             <div className="h-1.5 rounded-full bg-sand-100 overflow-hidden">
-                                                <div className={`h-full rounded-full ${barClass}`} style={{ width: `${pct}%` }} />
+                                                <div className="h-full rounded-full" style={{ width: `${pct}%`, background: STATUS_BAR_COLORS[status] }} />
                                             </div>
                                         </div>
                                     ))}
@@ -821,11 +863,11 @@ export default function Dashboard() {
                 <Card hover={false} className="p-6">
                     <div className="mb-1">
                         <h2 className="text-base font-semibold text-charcoal-800">Pending Approvals</h2>
-                        <p className="text-sm text-charcoal-500">Contributions that need your review and approval.</p>
+                        <p className="text-sm text-charcoal-500">VIBEs that need your review and approval.</p>
                     </div>
                     <div className="mt-4">
                         {pendingApprovalPocs.length === 0 ? (
-                            <p className="text-sm text-charcoal-400 py-6 text-center">No contributions pending approval.</p>
+                            <p className="text-sm text-charcoal-400 py-6 text-center">No VIBEs pending approval.</p>
                         ) : isTrackAdmin ? (
                             <>
                             
@@ -834,67 +876,48 @@ export default function Dashboard() {
                                 <span className="text-xs font-semibold text-charcoal-500 uppercase tracking-wide pb-2 border-b border-sand-200">Track</span>
                                 {pendingApprovalPocs.map((poc) => (
                                     <Fragment key={poc._id}>
-                                        <Link to={`/pocs/${poc._id}`} className="flex items-center gap-2 min-w-0 py-2.5 border-b border-sand-100 hover:bg-sand-50 rounded-l-lg -ml-2 pl-2 transition-colors">
-                                            <div className={`h-8 w-8 rounded-lg ${(TRACKS.find(t => t.key === poc.track)?.iconBg) || 'bg-terracotta-600'} flex items-center justify-center shrink-0`}>
-                                                {getTrackIconSrc(poc.track) ? (
-                                                    <img src={getTrackIconSrc(poc.track)} alt="" className="h-4 w-4 object-contain brightness-0 invert" />
-                                                ) : (
-                                                    <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                                                )}
-                                            </div>
+                                        <Link to={`/pocs/${poc._id}`} className="flex items-center gap-2.5 min-w-0 py-2.5 border-b border-sand-100 hover:bg-sand-50 rounded-l-lg -ml-2 pl-2 transition-colors">
+                                            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{background: TRACK_COLORS[poc.track] || '#314797'}}></span>
                                             <span className="text-sm font-medium text-charcoal-800 truncate">{poc.title}</span>
                                         </Link>
                                         <Link to={`/pocs/${poc._id}`} className="flex items-center py-2.5 border-b border-sand-100 hover:bg-sand-50 rounded-r-lg -mr-2 pr-2 transition-colors">
-                                            <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${getTrackBadgeClass(poc.track)}`}>
+                                            <span className="text-xs font-medium px-2 py-0.5 rounded-full border" style={getTrackBadgeStyle(poc.track)}>
                                                 {getTrackShortLabel(poc.track)}
                                             </span>
                                         </Link>
                                     </Fragment>
                                 ))}
-                                
                             </div>
                             <div className="mt-3 flex justify-end">
-                                    <Link to="/pocs?status=draft" className="text-sm text-blue-600 hover:text-blue-700 font-medium">View all approvals</Link>
-                                </div>
+                                <Link to="/pocs?status=draft" className="text-sm text-blue-600 hover:text-blue-700 font-medium">View all approvals</Link>
+                            </div>
                             </>
 
                             
                         ) : (
-                            /* Global admin: title + track + action (View + Publish) */
+                            /* Global admin: title + track + action (Publish only) */
                             <>
-                                <div className="grid grid-cols-[1fr_144px_120px] gap-x-3 items-end">
+                                <div className="grid grid-cols-[1fr_144px_72px] gap-x-3 items-end">
                                     <span className="text-xs font-semibold text-charcoal-500 uppercase tracking-wide pb-2 border-b border-sand-200">Title</span>
                                     <span className="text-xs font-semibold text-charcoal-500 uppercase tracking-wide pb-2 border-b border-sand-200">Track</span>
                                     <span className="text-xs font-semibold text-charcoal-500 uppercase tracking-wide pb-2 border-b border-sand-200">Action</span>
                                     {pendingApprovalPocs.map((poc) => (
                                         <Fragment key={poc._id}>
-                                            <div className="flex items-center gap-2 min-w-0 py-2.5 border-b border-sand-100">
-                                                <div className={`h-8 w-8 rounded-lg ${(TRACKS.find(t => t.key === poc.track)?.iconBg) || 'bg-terracotta-600'} flex items-center justify-center shrink-0`}>
-                                                    {getTrackIconSrc(poc.track) ? (
-                                                        <img src={getTrackIconSrc(poc.track)} alt="" className="h-4 w-4 object-contain brightness-0 invert" />
-                                                    ) : (
-                                                        <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                                                    )}
-                                                </div>
+                                            <Link to={`/pocs/${poc._id}`} className="flex items-center gap-2.5 min-w-0 py-2.5 border-b border-sand-100 hover:bg-sand-50 rounded-l-lg -ml-2 pl-2 transition-colors">
+                                                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{background: TRACK_COLORS[poc.track] || '#314797'}}></span>
                                                 <span className="text-sm font-medium text-charcoal-800 truncate">{poc.title}</span>
-                                            </div>
+                                            </Link>
                                             <div className="flex items-center py-2.5 border-b border-sand-100">
-                                                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${getTrackBadgeClass(poc.track)}`}>
+                                                <span className="text-xs font-medium px-2 py-0.5 rounded-full border" style={getTrackBadgeStyle(poc.track)}>
                                                     {getTrackShortLabel(poc.track)}
                                                 </span>
                                             </div>
-                                            <div className="flex items-center gap-1.5 py-2.5 border-b border-sand-100">
-                                                <Link
-                                                    to={`/pocs/${poc._id}`}
-                                                    className="text-xs font-medium px-2.5 py-1 rounded-lg border border-sand-300 text-charcoal-700 hover:bg-sand-50 transition-colors"
-                                                >
-                                                    View
-                                                </Link>
+                                            <div className="flex items-center justify-end py-2.5 border-b border-sand-100">
                                                 <button
                                                     type="button"
                                                     disabled={publishingId === poc._id}
                                                     onClick={() => handlePublishPoc(poc._id)}
-                                                    className="text-xs font-medium px-2.5 py-1 rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-60 transition-colors"
+                                                    className="text-center text-xs font-medium px-2.5 py-1 rounded-lg bg-violet-600 text-white hover:bg-violet-700 disabled:opacity-60 transition-colors"
                                                 >
                                                     {publishingId === poc._id ? '…' : 'Publish'}
                                                 </button>
@@ -914,11 +937,11 @@ export default function Dashboard() {
                 <Card hover={false} className="p-6">
                     <div className="mb-1">
                         <h2 className="text-base font-semibold text-charcoal-800">Recent Submissions</h2>
-                        <p className="text-sm text-charcoal-500">Latest published contributions added to the system.</p>
+                        <p className="text-sm text-charcoal-500">Latest published VIBEs added to the system.</p>
                     </div>
                     <div className="mt-4">
                         {recentSubmissions.length === 0 ? (
-                            <p className="text-sm text-charcoal-400 py-6 text-center">No published contributions yet.</p>
+                            <p className="text-sm text-charcoal-400 py-6 text-center">No published VIBEs yet.</p>
                         ) : (
                             <>
                                 <div className="grid grid-cols-[1fr_144px_76px] gap-x-3 items-end">
@@ -927,18 +950,12 @@ export default function Dashboard() {
                                     <span className="text-xs font-semibold text-charcoal-500 uppercase tracking-wide pb-2 border-b border-sand-200 text-right">Interested</span>
                                     {recentSubmissions.map((poc) => (
                                         <Fragment key={poc._id}>
-                                            <Link to={`/pocs/${poc._id}`} className="flex items-center gap-2 min-w-0 py-2.5 border-b border-sand-100 hover:bg-sand-50 rounded-l-lg -ml-2 pl-2 transition-colors">
-                                                <div className={`h-8 w-8 rounded-lg ${(TRACKS.find(t => t.key === poc.track)?.iconBg) || 'bg-terracotta-600'} flex items-center justify-center shrink-0`}>
-                                                    {getTrackIconSrc(poc.track) ? (
-                                                        <img src={getTrackIconSrc(poc.track)} alt="" className="h-4 w-4 object-contain brightness-0 invert" />
-                                                    ) : (
-                                                        <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                                                    )}
-                                                </div>
+                                            <Link to={`/pocs/${poc._id}`} className="flex items-center gap-2.5 min-w-0 py-2.5 border-b border-sand-100 hover:bg-sand-50 rounded-l-lg -ml-2 pl-2 transition-colors">
+                                                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{background: TRACK_COLORS[poc.track] || '#314797'}}></span>
                                                 <span className="text-sm font-medium text-charcoal-800 truncate">{poc.title}</span>
                                             </Link>
                                             <Link to={`/pocs/${poc._id}`} className="flex items-center py-2.5 border-b border-sand-100 hover:bg-sand-50 transition-colors">
-                                                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${getTrackBadgeClass(poc.track)}`}>
+                                                <span className="text-xs font-medium px-2 py-0.5 rounded-full border" style={getTrackBadgeStyle(poc.track)}>
                                                     {getTrackShortLabel(poc.track)}
                                                 </span>
                                             </Link>
@@ -979,10 +996,10 @@ export default function Dashboard() {
                             {topUsersByCredits.map((row, idx) => (
                                 <div
                                     key={row.user?._id || idx}
-                                    className="flex items-center gap-3 px-4 py-3 rounded-xl border border-sand-200 bg-sand-50/50 transition-colors"
+                                    className="flex items-center gap-3 px-4 py-3 rounded border border-sand-200 bg-sand-50/50 transition-colors"
                                 >
                                     <span className="w-6 shrink-0 text-sm font-bold text-charcoal-800">{idx + 1}</span>
-                                    <div className="h-7 w-7 rounded-full bg-gradient-to-br from-terracotta-400 to-terracotta-600 flex items-center justify-center shrink-0">
+                                    <div className="h-7 w-7 rounded-full bg-gradient-to-br from-terracotta-400 to-terracotta-600 flex items-center justify-center shrink-0 p-[5px]" style={{background:'#2e6fff'}}>
                                         <span className="text-xs font-bold text-white">{(row.user?.name || 'U').charAt(0).toUpperCase()}</span>
                                     </div>
                                     <div className="flex-1 min-w-0">
@@ -1032,8 +1049,8 @@ export default function Dashboard() {
                                                 return (
                                                     <div key={track.key} className="flex-1 h-full flex items-end justify-center">
                                                         <div
-                                                            className={`relative group/bar w-12 rounded-t-md cursor-default transition-opacity duration-150 hover:opacity-75 ${track.barClass}`}
-                                                            style={{ height: `${heightPct}%` }}
+                                                            className="relative group/bar w-12 rounded-t-md cursor-default transition-opacity duration-150 hover:opacity-75"
+                                                            style={{ height: `${heightPct}%`, background: track.color }}
                                                         >
                                                             <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-charcoal-800 text-white text-xs font-medium rounded-lg px-2.5 py-2 whitespace-nowrap opacity-0 group-hover/bar:opacity-100 transition-opacity pointer-events-none z-30 shadow-xl">
                                                                 <p className="font-semibold mb-0.5">{track.label}</p>

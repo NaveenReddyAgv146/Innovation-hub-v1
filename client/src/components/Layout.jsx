@@ -30,22 +30,22 @@ export default function Layout({ children }) {
 
     const navItems = [
         { path: '/dashboard', label: 'Dashboard', icon: HomeIcon },
-        { path: '/pocs', label: 'Contributions', icon: BoltIcon },
+        { path: '/pocs', label: 'VIBE', icon: BoltIcon },
     ];
 
     if (user?.role === 'viewer') {
         navItems.push({ path: '/pocs?interested=true', label: 'Interested', icon: StarIcon });
-        navItems.push({ path: '/pocs?involved=true', label: 'Involved Contributions', icon: ScopeIcon });
+        navItems.push({ path: '/pocs?involved=true', label: 'Involved VIBE', icon: ScopeIcon });
         navItems.push({ path: '/pocs?pocContact=true', label: 'Project Ownership', icon: UsersIcon });
         navItems.push({ path: '/my-credits', label: 'My Credits', icon: TrophyIcon });
     }
 
     if (user?.role === 'admin' || user?.role === 'developer') {
-        navItems.push({ path: '/pocs/new', label: 'New Contribution Brief', icon: PlusIcon });
+        navItems.push({ path: '/pocs/new', label: 'New VIBE', icon: PlusIcon });
     }
 
     if (user?.role === 'admin') {
-        navItems.push({ path: '/admin/idea-reviews', label: 'Contribution Queue', icon: ReviewIcon });
+        navItems.push({ path: '/admin/idea-reviews', label: 'VIBE Queue', icon: ReviewIcon });
         navItems.push({ path: '/admin/user-interests', label: 'Engagement Overview', icon: StarIcon });
         navItems.push({ path: '/admin/leaderboard', label: 'Leaderboard', icon: TrophyIcon });
     }

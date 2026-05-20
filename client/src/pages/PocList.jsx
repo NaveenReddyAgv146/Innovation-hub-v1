@@ -28,6 +28,14 @@ const TRACK_OPTIONS = [
     { value: 'Organizational Building & Thought Leadership', label: 'Thought Leadership' },
 ];
 
+const TRACK_COLORS = {
+    'Solutions': '#314797',
+    'Delivery': '#0070c0',
+    'GTM/Sales': '#9706a2',
+    'Organizational Building & Thought Leadership': '#6da353',
+    'Learning': '#eb7b1e',
+};
+
 const getAuthorName = (author = {}) =>
     [author.firstName, author.lastName].filter(Boolean).join(' ').trim() || author.name || 'Unknown';
 const getTitleWithTrack = (poc = {}) => (poc.track ? `${poc.title} · ${poc.track}` : poc.title);
@@ -128,7 +136,7 @@ export default function PocList() {
             setPocs(data.pocs);
             setPagination(data.pagination);
         } catch {
-            setError('Failed to load contribution briefs');
+            setError('Failed to load VIBEs');
         } finally {
             setLoading(false);
         }
@@ -293,14 +301,14 @@ export default function PocList() {
         <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-bold text-charcoal-800">Contribution Briefs</h1>
+                    <h1 className="text-2xl font-bold text-charcoal-800">VIBEs</h1>
                     <p className="text-charcoal-500 text-sm mt-0.5">
                         {pagination.total} Project{pagination.total !== 1 ? 's' : ''} total
                     </p>
                 </div>
                 {(user?.role === 'admin' || user?.role === 'developer') && (
                     <Link to="/pocs/new">
-                        <Button>+ New Contribution Brief</Button>
+                        <Button>+ New VIBE</Button>
                     </Link>
                 )}
             </div>
@@ -339,7 +347,7 @@ export default function PocList() {
                 </div>
             </Card>
 
-            <Modal isOpen={filtersOpen} onClose={() => setFiltersOpen(false)} title="Filter Contributions" size="lg">
+            <Modal isOpen={filtersOpen} onClose={() => setFiltersOpen(false)} title="Filter VIBEs" size="lg">
                 <div className="space-y-6">
                     {user?.role === 'viewer' && (
                         <div className="space-y-3">
@@ -531,8 +539,8 @@ export default function PocList() {
                 <ErrorState message={error} onRetry={() => fetchPocs(1)} />
             ) : pocs.length === 0 ? (
                 <EmptyState
-                    title="No contribution briefs found"
-                    message="Try adjusting your search or filters, or create a new contribution brief."
+                    title="No VIBEs found"
+                    message="Try adjusting your search or filters, or create a new VIBE."
                     icon={(
                         <svg className="w-16 h-16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
                             <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
@@ -548,7 +556,7 @@ export default function PocList() {
                         return (
                             <Link key={poc._id} to={`/pocs/${poc._id}`}>
                                 <Card className="overflow-hidden h-full flex flex-col">
-                                    <div className={`aspect-video bg-gradient-to-br ${thumbnailGradient} relative overflow-hidden`}>
+                                    <div className="aspect-video relative overflow-hidden" style={{background: TRACK_COLORS[poc.track] || '#314797'}}>
                                         {poc.thumbnail ? (
                                             <img src={poc.thumbnail} alt={poc.title} className="w-full h-full object-cover" />
                                         ) : (
@@ -556,8 +564,8 @@ export default function PocList() {
                                                 {trackIcon ? (
                                                     <img
                                                         src={trackIcon}
-                                                        alt={`${poc.track || 'Contribution'} icon`}
-                                                        className="w-10 h-10 object-contain brightness-0 invert"
+                                                        alt={`${poc.track || 'VIBE'} icon`}
+                                                        className="w-14 h-14 object-contain" style={{mixBlendMode:'screen'}}
                                                     />
                                                 ) : (
                                                     <svg className="w-10 h-10 text-white/85" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}>

@@ -47,7 +47,7 @@ export default function MyCredits() {
                         <p className="mt-1 text-2xl font-bold text-violet-700">{Number(summary.totalScore || 0).toFixed(2)}</p>
                     </div>
                     <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-                        <p className="text-xs uppercase tracking-wide text-emerald-700">Finished Contributions</p>
+                        <p className="text-xs uppercase tracking-wide text-emerald-700">Finished VIBEs</p>
                         <p className="mt-1 text-2xl font-bold text-emerald-700">{summary.finishedContributions || 0}</p>
                     </div>
                     <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
@@ -60,7 +60,7 @@ export default function MyCredits() {
             <Card hover={false} className="p-5">
                 <h2 className="text-lg font-semibold text-charcoal-800">Credits by Track</h2>
                 {tracks.length === 0 ? (
-                    <p className="mt-3 text-sm text-charcoal-500">No approved finished contributions yet.</p>
+                    <p className="mt-3 text-sm text-charcoal-500">No approved finished VIBEs yet.</p>
                 ) : (
                     <div className="mt-4 overflow-auto">
                         <table className="min-w-full text-sm">

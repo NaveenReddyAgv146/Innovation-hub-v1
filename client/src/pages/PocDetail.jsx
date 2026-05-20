@@ -116,7 +116,7 @@ export default function PocDetail() {
             const { data } = await pocService.getById(id);
             setPoc(data.poc);
         } catch {
-            setError('Failed to load contribution brief');
+            setError('Failed to load VIBE');
         } finally {
             setLoading(false);
         }
@@ -356,7 +356,7 @@ export default function PocDetail() {
     const confirmCancelIdea = async () => {
         if (!poc?._id || !canCancel) return;
         if (!cancelReason.trim()) {
-            setError('Please provide a reason to cancel this contribution');
+            setError('Please provide a reason to cancel this VIBE');
             return;
         }
         setCancelling(true);
@@ -366,7 +366,7 @@ export default function PocDetail() {
             setCancelModalOpen(false);
             setCancelReason('');
         } catch (err) {
-            setError(getApiErrorMessage(err, 'Failed to cancel contribution'));
+            setError(getApiErrorMessage(err, 'Failed to cancel VIBE'));
         } finally {
             setCancelling(false);
         }
@@ -416,7 +416,7 @@ export default function PocDetail() {
 
     const confirmInterest = async () => {
         if (currentUserIsApproved) {
-            setError('You are already approved for this contribution and cannot edit availability');
+            setError('You are already approved for this VIBE and cannot edit availability');
             return;
         }
         if (!poc?._id || !availabilityValue.trim()) {
@@ -548,7 +548,7 @@ export default function PocDetail() {
             const { data } = await pocService.finish(poc._id);
             setPoc((prev) => ({ ...prev, ...(data.poc || {}) }));
         } catch (err) {
-            setError(getApiErrorMessage(err, 'Failed to mark contribution as finished'));
+            setError(getApiErrorMessage(err, 'Failed to mark VIBE as finished'));
         } finally {
             setFinishing(false);
         }
@@ -561,7 +561,7 @@ export default function PocDetail() {
             const { data } = await pocService.goLive(poc._id);
             setPoc((prev) => ({ ...prev, ...(data.poc || {}) }));
         } catch (err) {
-            setError(getApiErrorMessage(err, 'Failed to start contribution as live'));
+            setError(getApiErrorMessage(err, 'Failed to start VIBE as live'));
         } finally {
             setStartingLive(false);
         }
@@ -574,7 +574,7 @@ export default function PocDetail() {
             const { data } = await pocService.markDraft(poc._id);
             setPoc((prev) => ({ ...prev, ...(data.poc || {}) }));
         } catch (err) {
-            setError(getApiErrorMessage(err, 'Failed to move contribution to draft'));
+            setError(getApiErrorMessage(err, 'Failed to move VIBE to draft'));
         } finally {
             setMarkingDraft(false);
         }
@@ -636,7 +636,7 @@ export default function PocDetail() {
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
                 </svg>
-                Back to Contributions
+                Back to VIBEs
             </Link>
 
             {poc.thumbnail && (
@@ -677,7 +677,7 @@ export default function PocDetail() {
                     <div className="flex gap-2">
                         {canCancel && (
                             <Button variant="danger" size="sm" loading={cancelling} onClick={handleCancelIdea}>
-                                Cancel Contribution
+                                Cancel VIBE
                             </Button>
                         )}
                         {canFinish && (
@@ -775,7 +775,7 @@ export default function PocDetail() {
                         </p>
                     </div>
                     <div className="space-y-1">
-                        <p className="text-xs uppercase tracking-wide text-charcoal-400">Contribution Start Date</p>
+                        <p className="text-xs uppercase tracking-wide text-charcoal-400">VIBE Start Date</p>
                         <p className="text-sm text-charcoal-700">
                             {formatIstDateTime(poc.liveAt)}
                         </p>
@@ -949,7 +949,7 @@ export default function PocDetail() {
             {canViewHoursSummary && (
                 <div className="bg-white rounded-2xl border border-sand-200 p-6 space-y-4">
                     <div className="flex items-center justify-between gap-3 flex-wrap">
-                        <h2 className="text-lg font-semibold text-charcoal-800">Contribution Hours</h2>
+                        <h2 className="text-lg font-semibold text-charcoal-800">VIBE Hours</h2>
                         {poc.status === 'finished' && (
                             <span className="text-xs text-charcoal-500">Approve hours for finished contributors</span>
                         )}
@@ -1220,7 +1220,7 @@ export default function PocDetail() {
             {poc.status === 'finished' && (
                 <div className="rounded-2xl border border-sand-200 bg-gradient-to-b from-white to-sand-50/40 p-6 space-y-5">
                     <div className="flex items-center justify-between gap-3 flex-wrap">
-                        <h2 className="text-lg font-semibold text-charcoal-800">Contribution Feedback</h2>
+                        <h2 className="text-lg font-semibold text-charcoal-800">VIBE Feedback</h2>
                         <Badge color="green">Finished Collaboration Notes</Badge>
                     </div>
 
@@ -1426,7 +1426,7 @@ export default function PocDetail() {
                 </div>
             </Modal>
 
-            <Modal isOpen={cancelModalOpen} onClose={closeCancelModal} title="Cancel Contribution" size="sm">
+            <Modal isOpen={cancelModalOpen} onClose={closeCancelModal} title="Cancel VIBE" size="sm">
                 <div className="space-y-3">
                     <p className="text-sm text-charcoal-600">
                         Please provide a reason for cancelling <span className="font-semibold text-charcoal-800">{poc.title}</span>.

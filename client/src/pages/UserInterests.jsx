@@ -54,7 +54,7 @@ export default function UserInterests() {
                 <h1 className="text-2xl font-bold text-charcoal-800">Engagement Overview</h1>
                 <p className="text-charcoal-500 text-sm mt-0.5">
                     {assignedAdminTrack
-                        ? `Track which users are interested in ${assignedAdminTrack} contributions.`
+                        ? `Track which users are interested in ${assignedAdminTrack} VIBEs.`
                         : 'Track which projects each user marked as interested.'}
                 </p>
             </div>
